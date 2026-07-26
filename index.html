@@ -58,25 +58,28 @@
     <div class="panel" id="formPanel">
       <h2><span class="bar"></span><span id="formTitle">Yeni Sipariş</span></h2>
 
-      <div class="field"><label>İşlem Türü</label>
-        <select id="orderType" onchange="onTypeChange()">
-          <option value="rank">Rank Boost</option>
-          <option value="netwin">Net Win</option>
-          <option value="placement">Placement</option>
-          <option value="custom">Özel (Custom)</option>
-        </select>
+      <div class="two">
+        <div class="field"><label>İşlem Türü</label>
+          <select id="orderType" onchange="onTypeChange()">
+            <option value="rank">Rank Boost</option>
+            <option value="netwin">Net Win</option>
+            <option value="placement">Placement</option>
+            <option value="custom">Özel (Custom)</option>
+          </select>
+        </div>
+        <div class="field"><label>Hangi Panelden</label>
+          <select id="platform" onchange="onPlatformChange()">
+            <option value="">— seç —</option>
+            <option value="Eldorado">Eldorado ($)</option>
+            <option value="GameBoost">GameBoost (€)</option>
+            <option value="Diğer">Diğer</option>
+          </select>
+        </div>
       </div>
-
-      <div class="field"><label>Hangi Panelden</label>
-        <select id="platform" onchange="onPlatformChange()">
-          <option value="">— seç —</option>
-          <option value="Eldorado">Eldorado ($)</option>
-          <option value="GameBoost">GameBoost (€)</option>
-          <option value="Diğer">Diğer</option>
-        </select>
+      <div class="two">
+        <div class="field"><label>Link</label><input type="text" id="platformRef" placeholder="sipariş linki"></div>
+        <div class="field"><label>Booster</label><select id="boosterSel" onchange="onRankChange()"></select></div>
       </div>
-      <div class="field"><label>Panel Sipariş No</label><input type="text" id="platformRef" placeholder="opsiyonel"></div>
-      <div class="field"><label>Booster</label><select id="boosterSel" onchange="onRankChange()"></select></div>
 
       <!-- Rank Boost alanları -->
       <div id="grpRank">
@@ -105,10 +108,8 @@
       </div>
 
       <!-- Extralar (çarpanlar Fiyat Listesi'nden düzenlenir) -->
-      <div id="grpExtras">
-        <div class="field" style="margin-bottom:8px"><label>Extralar</label>
-          <div class="toggles" id="extrasBox" style="margin-bottom:0"></div>
-        </div>
+      <div id="grpExtras" class="field"><label>Extralar</label>
+        <div class="extra-pills" id="extrasBox"></div>
       </div>
 
       <div class="three">
@@ -116,10 +117,12 @@
         <div class="field"><label>Birim</label><select id="currency" onchange="onMoneyChange()">
           <option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="TRY">₺ TL</option></select></div>
       </div>
-      <div class="field" style="margin-bottom:8px"><label>Panel Komisyonu %</label>
-        <select id="feePct" onchange="onMoneyChange()"><option value="0">%0</option><option value="10">%10</option><option value="45">%45</option></select>
+      <div class="two">
+        <div class="field"><label>Komisyon %</label>
+          <select id="feePct" onchange="onMoneyChange()"><option value="0">%0</option><option value="10">%10</option><option value="45">%45</option></select>
+        </div>
+        <div class="field" id="rateField"><label>Kur (1 birim = ? TL)</label><input type="number" id="rate" placeholder="örn. 34" min="0" step="0.01" oninput="onMoneyChange()"></div>
       </div>
-      <div class="field" style="margin-bottom:8px" id="rateField"><label>Kur (1 birim = ? TL) — elle gir</label><input type="number" id="rate" placeholder="örn. 34" min="0" step="0.01" oninput="onMoneyChange()"></div>
       <div class="field" style="margin-bottom:8px"><label>Booster'a Ödenecek (TL)</label><input type="number" id="payout" placeholder="0" min="0" oninput="onMoneyChange()"></div>
       <div class="suggest" id="suggest"></div>
       <div class="money" id="moneyBox"></div>
@@ -163,6 +166,20 @@
     <div id="reportBody"></div>
   </div>
 
+  <!-- ARŞİV -->
+  <div id="tab-arsiv" class="panel hidden">
+    <h2><span class="bar"></span>Arşiv</h2>
+    <div class="toolbar">
+      <select id="arcPanel" onchange="renderArchive()">
+        <option value="">Tüm Paneller</option>
+        <option value="Eldorado">Eldorado</option>
+        <option value="GameBoost">GameBoost</option>
+        <option value="Diğer">Diğer</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto"><div id="archiveBody"></div></div>
+  </div>
+
   <!-- BOOSTERLAR -->
   <div id="tab-boosterlar" class="panel hidden">
     <h2><span class="bar"></span>Boosterlar & Davet</h2>
@@ -193,7 +210,7 @@
         <option value="TR">TR</option><option value="EU">EU</option><option value="NA">NA</option><option value="Diğer">Diğer</option></select></div>
       <div class="field"><label>Başlangıç RR</label><input type="number" id="cRR" min="0" max="99" value="0" oninput="calcRender()"></div>
     </div>
-    <div class="toggles" style="flex-direction:row;gap:18px;flex-wrap:wrap;margin-bottom:4px" id="calcExtras"></div>
+    <div class="extra-pills" style="margin-bottom:10px" id="calcExtras"></div>
     <div id="offerBox"></div>
   </div>
 

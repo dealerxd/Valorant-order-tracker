@@ -1,3 +1,43 @@
+/* ============ ARŞİV ============ */
+function renderArchive(){
+  if(!isAdmin())return;
+  const el=document.getElementById('archiveBody'); if(!el) return;
+  const fp=document.getElementById('arcPanel').value;
+  const rows=records.filter(r=>r.archived).filter(r=>!fp||F(r.id).platform===fp);
+  if(!rows.length){ el.innerHTML=`<div class="empty"><div class="big">Arşiv boş</div>
+    <div>Sipariş kartındaki "🗄 Arşivle" butonuyla biten işler buraya düşer.</div></div>`; return; }
+  let brutT=0,netT=0,payT=0,karT=0;
+  const body=rows.map(r=>{
+    const f=F(r.id), net=netGelirTLof(r.id), kar=net-r.payout;
+    brutT+=brutTLof(r.id); netT+=net; payT+=r.payout; karT+=kar;
+    const link=f.platformRef
+      ? (/^https?:\/\//i.test(f.platformRef)
+          ? `<a href="${esc(f.platformRef)}" target="_blank" rel="noopener" style="color:var(--blue)">aç ↗</a>`
+          : esc(f.platformRef))
+      : '—';
+    return `<tr>
+      <td style="white-space:nowrap">${r.tarih}</td>
+      <td>${esc(routeText(r))}</td>
+      <td>${esc(f.platform||'—')}</td>
+      <td>${link}</td>
+      <td class="r" style="white-space:nowrap">${fmt(f.cost,f.costCur)}${f.feePct?` <small style="color:var(--muted)">−%${f.feePct}</small>`:''}</td>
+      <td class="r">${fmt(net,'TRY')}</td>
+      <td class="r">${r.payout.toLocaleString('tr-TR')}</td>
+      <td class="r fiyat" style="color:${kar<0?'var(--red)':'var(--green)'}">${fmt(kar,'TRY')}</td>
+      <td class="r"><button class="icon-btn" title="Arşivden çıkar" onclick="toggleArchive('${r.id}',false)">↩</button></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`<table>
+    <thead><tr><th>Tarih</th><th>İş</th><th>Panel</th><th>Link</th>
+      <th class="r">Boost Fiyatı</th><th class="r">Net Gelir (TL)</th><th class="r">Booster (TL)</th><th class="r">Kâr (TL)</th><th></th></tr></thead>
+    <tbody>${body}</tbody>
+    <tfoot><tr><th colspan="5" style="text-align:right">Toplam (${rows.length} iş)</th>
+      <th class="r" style="color:var(--blue)">${fmt(netT,'TRY')}</th>
+      <th class="r">${payT.toLocaleString('tr-TR')}</th>
+      <th class="r" style="color:${karT<0?'var(--red)':'var(--green)'}">${fmt(karT,'TRY')}</th><th></th></tr></tfoot>
+  </table>`;
+}
+
 /* ============ RAPOR ============ */
 function clearReportDates(){document.getElementById('repFrom').value='';document.getElementById('repTo').value='';renderReport();}
 function renderReport(){

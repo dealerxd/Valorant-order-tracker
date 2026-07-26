@@ -26,11 +26,11 @@ function onTypeChange(){
   onRankChange();
 }
 
-/* Extra toggle'ları (çarpanlar SETTINGS.extras'tan) */
+/* Extra pill'leri (çarpanlar SETTINGS.extras'tan) */
 function renderFormExtras(){
   const box=document.getElementById('extrasBox'); if(!box) return;
   const checked=formSelectedExtras();
-  box.innerHTML=EXTRA_DEF.map(e=>`<label class="tg"><input type="checkbox" id="fx-${e.key}" ${checked.includes(e.key)?'checked':''} onchange="onRankChange()"><span class="sw"></span>${e.label} <b>×${extraMultOf(e.key).toLocaleString('tr-TR')}</b></label>`).join('');
+  box.innerHTML=EXTRA_DEF.map(e=>`<label class="pill"><input type="checkbox" id="fx-${e.key}" ${checked.includes(e.key)?'checked':''} onchange="onRankChange()">${e.label} <b>×${extraMultOf(e.key).toLocaleString('tr-TR')}</b></label>`).join('');
 }
 function formSelectedExtras(){ return EXTRA_DEF.filter(e=>{const c=document.getElementById('fx-'+e.key);return c&&c.checked;}).map(e=>e.key); }
 
@@ -227,6 +227,18 @@ function routeHTML(r){
   if(r.orderType==='custom')    return `Özel İş`;
   return `${esc(r.baslangic)}<span class="arrow">→</span>${esc(r.hedef)}`;
 }
+function routeText(r){
+  if(r.orderType==='netwin')    return `${r.baslangic} · ${r.winCount} Net Win`;
+  if(r.orderType==='placement') return `${r.baslangic} · ${r.winCount} Placement`;
+  if(r.orderType==='custom')    return (r.jobDesc||'Özel iş').slice(0,40);
+  return `${r.baslangic} → ${r.hedef}`;
+}
+/* Link ise tıklanabilir yap, değilse #ref olarak göster */
+function refHTML(ref){
+  if(!ref) return '';
+  if(/^https?:\/\//i.test(ref)) return ` <a href="${esc(ref)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">↗ link</a>`;
+  return ' #'+esc(ref);
+}
 
 function renderStats(){
   const el=document.getElementById('statsRow');
@@ -284,7 +296,7 @@ function render(){
         <div class="rec-meta" style="margin-top:7px">
           ${r.orderType!=='rank'?`<span class="chip" style="border-color:rgba(90,157,237,.35);color:var(--blue)">🎯 ${ORDER_TYPES[r.orderType]}</span>`:''}
           ${r.archived?`<span class="chip" style="color:var(--amber)">🗄 arşiv</span>`:''}
-          ${isAdmin()&&f.platform?`<span class="chip" style="border-color:rgba(212,175,55,.3);color:var(--gold)">🛒 ${esc(f.platform)}${f.platformRef?' #'+esc(f.platformRef):''}</span>`:''}
+          ${isAdmin()&&f.platform?`<span class="chip" style="border-color:rgba(212,175,55,.3);color:var(--gold)">🛒 ${esc(f.platform)}${refHTML(f.platformRef)}</span>`:''}
           ${isAdmin()&&r.boosterId?`<span class="chip booster">👤 ${esc(nameOf(r.boosterId))}</span>`:''}
           ${isAdmin()&&!r.boosterId?`<span class="chip" style="color:var(--amber)">⚠ atanmadı</span>`:''}
           <span class="chip">🗓 ${r.tarih}</span>

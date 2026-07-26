@@ -41,7 +41,7 @@ function fillCalcSelects(){const f=document.getElementById('cFrom'),t=document.g
 function renderCalcExtras(){
   const box=document.getElementById('calcExtras'); if(!box) return;
   const checked=EXTRA_DEF.filter(e=>{const c=document.getElementById('ce-'+e.key);return c&&c.checked;}).map(e=>e.key);
-  box.innerHTML=EXTRA_DEF.map(e=>`<label class="tg"><input type="checkbox" id="ce-${e.key}" ${checked.includes(e.key)?'checked':''} onchange="calcRender()"><span class="sw"></span>${e.label} <b>×${extraMultOf(e.key).toLocaleString('tr-TR')}</b></label>`).join('');
+  box.innerHTML=EXTRA_DEF.map(e=>`<label class="pill"><input type="checkbox" id="ce-${e.key}" ${checked.includes(e.key)?'checked':''} onchange="calcRender()">${e.label} <b>×${extraMultOf(e.key).toLocaleString('tr-TR')}</b></label>`).join('');
 }
 function calcSelectedExtras(){ return EXTRA_DEF.filter(e=>{const c=document.getElementById('ce-'+e.key);return c&&c.checked;}).map(e=>e.key); }
 function calcRender(){

@@ -27,7 +27,7 @@ async function loadAll(){
     costTL:Number(f.cost_tl)||0, rate:Number(f.rate)||0 });
   setSync('ok','● bağlı · canlı');
   fillBoosterSelects(); render();
-  if(isAdmin()){ renderBoosters(); renderInvites(); }
+  if(isAdmin()){ renderBoosters(); renderInvites(); renderArchive(); }
 }
 const F=id=>finance[id]||{platform:'',platformRef:'',cost:0,costCur:'USD',feePct:0,costTL:0};
 /* costTL = brüt GELİR TL (boost fiyatı × kur, sipariş anında sabit) */

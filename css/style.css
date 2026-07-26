@@ -60,8 +60,8 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;fl
   margin-bottom:18px;display:flex;align-items:center;gap:9px}
 .panel h2 .bar{width:4px;height:18px;background:var(--gold);border-radius:2px}
 
-.field{margin-bottom:14px}
-.field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.field{margin-bottom:10px}
+.field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
 .field input,.field select,.field textarea{width:100%;background:#0d0d0f;border:1px solid var(--line);border-radius:9px;
   color:var(--text);padding:11px 12px;font-family:'Inter',sans-serif;font-size:14px;transition:.15s}
 .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--gold-soft);box-shadow:0 0 0 3px rgba(212,175,55,.12)}
@@ -73,6 +73,13 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;fl
 .suggest .use{color:var(--blue);cursor:pointer;text-decoration:underline;margin-left:6px}
 
 .toggles{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+.extra-pills{display:flex;flex-wrap:wrap;gap:7px}
+.pill{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:20px;padding:5px 12px;
+  font-size:12px;color:var(--muted);cursor:pointer;user-select:none;transition:.15s;background:#0d0d0f}
+.pill b{color:var(--muted);font-weight:600;font-size:11px}
+.pill input{display:none}
+.pill:has(input:checked){border-color:var(--gold-soft);color:var(--gold);background:rgba(212,175,55,.1)}
+.pill:has(input:checked) b{color:var(--gold)}
 .tg{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--silver);cursor:pointer;user-select:none}
 .tg b{color:var(--gold);font-weight:600}.tg input{display:none}
 .tg .sw{width:38px;height:21px;border-radius:20px;background:#26262c;position:relative;transition:.2s;flex-shrink:0;border:1px solid var(--line)}
