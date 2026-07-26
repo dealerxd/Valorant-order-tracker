@@ -89,10 +89,6 @@
           <div class="field"><label>Bölge</label><select id="region" onchange="onRankChange()">
             <option value="TR">TR</option><option value="EU">EU</option><option value="NA">NA</option><option value="Diğer">Diğer</option></select></div>
         </div>
-        <div class="toggles">
-          <label class="tg"><input type="checkbox" id="duo" onchange="onRankChange()"><span class="sw"></span>Duo <b>×2.00</b></label>
-          <label class="tg"><input type="checkbox" id="express" onchange="onRankChange()"><span class="sw"></span>Express <b>×1.05</b></label>
-        </div>
       </div>
 
       <!-- Net Win / Placement alanları -->
@@ -106,6 +102,13 @@
       <!-- Özel iş alanları -->
       <div id="grpCustom" class="hidden">
         <div class="field"><label>İş Açıklaması</label><textarea id="jobDesc" placeholder="Ne yapılacak? ör. coaching, unrated maç, özel istek..."></textarea></div>
+      </div>
+
+      <!-- Extralar (çarpanlar Fiyat Listesi'nden düzenlenir) -->
+      <div id="grpExtras">
+        <div class="field" style="margin-bottom:8px"><label>Extralar</label>
+          <div class="toggles" id="extrasBox" style="margin-bottom:0"></div>
+        </div>
       </div>
 
       <div class="three">
@@ -190,10 +193,7 @@
         <option value="TR">TR</option><option value="EU">EU</option><option value="NA">NA</option><option value="Diğer">Diğer</option></select></div>
       <div class="field"><label>Başlangıç RR</label><input type="number" id="cRR" min="0" max="99" value="0" oninput="calcRender()"></div>
     </div>
-    <div class="toggles" style="flex-direction:row;gap:24px;margin-bottom:4px">
-      <label class="tg"><input type="checkbox" id="cDuo" onchange="calcRender()"><span class="sw"></span>Duo</label>
-      <label class="tg"><input type="checkbox" id="cExpress" onchange="calcRender()"><span class="sw"></span>Express</label>
-    </div>
+    <div class="toggles" style="flex-direction:row;gap:18px;flex-wrap:wrap;margin-bottom:4px" id="calcExtras"></div>
     <div id="offerBox"></div>
   </div>
 

@@ -3,7 +3,8 @@ function rowToRec(r){
   return {id:r.id,orderType:r.order_type||'rank',baslangic:r.baslangic||'',hedef:r.hedef||'',
     winCount:Number(r.win_count)||0,jobDesc:r.job_desc||'',
     startRR:r.start_rr||0,region:r.region||'TR',
-    duo:!!r.duo,express:!!r.express,durum:r.durum||'yeni',tarih:r.tarih||'',not:r.note||'',image:r.image||null,
+    extras:Array.isArray(r.extras)?r.extras:[],
+    durum:r.durum||'yeni',tarih:r.tarih||'',not:r.note||'',image:r.image||null,
     boosterId:r.booster_id||null,payout:Number(r.booster_payout)||0,paid:!!r.paid,
     archived:!!r.archived,created:r.created_at||''};
 }

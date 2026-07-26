@@ -11,19 +11,23 @@ function calcOffer(from,to,opts){
   const rrDisc=Math.round(firstDiv*(startRR/100));
   let total=base-rrDisc;
   const rm=REGION_MULT[opts.region||'TR']!=null?REGION_MULT[opts.region||'TR']:1;
-  total*=rm; if(opts.duo)total*=SETTINGS.duo_mult; if(opts.express)total*=SETTINGS.express_mult;
-  return {base,rrDisc,startRR,region:opts.region||'TR',regionMult:rm,duo:!!opts.duo,express:!!opts.express,total:Math.round(total)};
+  total*=rm;
+  const ex=opts.extras||[];
+  total*=extrasMult(ex);
+  return {base,rrDisc,startRR,region:opts.region||'TR',regionMult:rm,extras:ex,total:Math.round(total)};
 }
 const suggestedPrice=(f,t)=>{const o=calcOffer(f,t);return o?o.base:null;};
 
 async function loadPricing(){
   const { data }=await sb.from('pricing').select('*');
+  const defExtras=Object.assign({},SETTINGS.extras);
   (data||[]).forEach(p=>{
     if(p.id==='rank_values') RANK_VALUE=p.data;
     if(p.id==='net_win') NET_WIN_PRICE=p.data;
     if(p.id==='settings') SETTINGS=Object.assign(SETTINGS,p.data);
   });
-  fillRankSelects(); fillCalcSelects();
+  SETTINGS.extras=Object.assign(defExtras,SETTINGS.extras||{});
+  fillRankSelects(); fillCalcSelects(); renderFormExtras(); renderCalcExtras();
 }
 async function savePricing(id,data){
   const { error }=await sb.from('pricing').upsert({id,data,updated_at:new Date().toISOString()});
@@ -34,18 +38,23 @@ async function savePricing(id,data){
 /* ============ HESAPLAYICI SEKMESİ ============ */
 function fillCalcSelects(){const f=document.getElementById('cFrom'),t=document.getElementById('cTo');if(!f)return;f.innerHTML='';t.innerHTML='';
   RANK_ORDER.forEach(r=>{f.add(new Option(r,r));t.add(new Option(r,r));});f.value='Diamond 1';t.value='Ascendant 1';}
+function renderCalcExtras(){
+  const box=document.getElementById('calcExtras'); if(!box) return;
+  const checked=EXTRA_DEF.filter(e=>{const c=document.getElementById('ce-'+e.key);return c&&c.checked;}).map(e=>e.key);
+  box.innerHTML=EXTRA_DEF.map(e=>`<label class="tg"><input type="checkbox" id="ce-${e.key}" ${checked.includes(e.key)?'checked':''} onchange="calcRender()"><span class="sw"></span>${e.label} <b>×${extraMultOf(e.key).toLocaleString('tr-TR')}</b></label>`).join('');
+}
+function calcSelectedExtras(){ return EXTRA_DEF.filter(e=>{const c=document.getElementById('ce-'+e.key);return c&&c.checked;}).map(e=>e.key); }
 function calcRender(){
+  const ex=calcSelectedExtras();
   const o=calcOffer(document.getElementById('cFrom').value,document.getElementById('cTo').value,{
-    startRR:document.getElementById('cRR').value,region:document.getElementById('cRegion').value,
-    duo:document.getElementById('cDuo').checked,express:document.getElementById('cExpress').checked});
+    startRR:document.getElementById('cRR').value,region:document.getElementById('cRegion').value,extras:ex});
   const box=document.getElementById('offerBox');
   if(!o){box.innerHTML=`<div class="money"><div class="row"><span>Geçersiz</span></div></div>`;return;}
   box.innerHTML=`<div class="money" style="border-color:rgba(212,175,55,.35)">
     <div class="row"><span>base</span><b>${o.base.toLocaleString('tr-TR')}</b></div>
     ${o.rrDisc>0?`<div class="row"><span>RR indirimi</span><b style="color:var(--green)">−${o.rrDisc}</b></div>`:''}
     ${o.regionMult!==1?`<div class="row"><span>bölge</span><b style="color:var(--blue)">×${o.regionMult}</b></div>`:''}
-    ${o.duo?`<div class="row"><span>duo</span><b style="color:var(--blue)">×${SETTINGS.duo_mult}</b></div>`:''}
-    ${o.express?`<div class="row"><span>express</span><b style="color:var(--blue)">×${SETTINGS.express_mult}</b></div>`:''}
+    ${o.extras.map(k=>`<div class="row"><span>${extraLabel(k)}</span><b style="color:var(--blue)">×${extraMultOf(k).toLocaleString('tr-TR')}</b></div>`).join('')}
     <div class="row kar"><span>Toplam</span><b style="font-size:22px;color:var(--gold)">${o.total.toLocaleString('tr-TR')}</b></div></div>`;
 }
 
@@ -81,7 +90,19 @@ function renderPriceTables(){
     <table><thead><tr><th>Rank</th><th class="r">Fiyat</th></tr></thead><tbody>${
       RANK_ORDER.map(r=>`<tr><td>${r}</td><td class="r fiyat">${placementPrice(r).toLocaleString('tr-TR')}</td></tr>`).join('')
     }</tbody></table></div>`;
+  // Extra çarpanları (düzenlenebilir)
+  html+=`<div class="price-block"><h3>${bar}Extra Çarpanları <span style="color:var(--muted);font-size:12px">· ×1,00 = etkisiz</span></h3>
+    <table><thead><tr><th>Extra</th><th class="r">Çarpan (×)</th></tr></thead><tbody>${
+      EXTRA_DEF.map(e=> editable
+        ? `<tr><td>${e.label}</td><td class="r"><input class="pedit" type="number" step="0.05" min="0" id="ex-${e.key}" value="${extraMultOf(e.key)}"></td></tr>`
+        : `<tr><td>${e.label}</td><td class="r fiyat">×${extraMultOf(e.key).toLocaleString('tr-TR')}</td></tr>`).join('')
+    }</tbody></table>${editable?`<button class="btn btn-gold btn-sm" style="width:auto;margin-top:10px" onclick="saveExtras()">Extra Çarpanlarını Kaydet</button>`:''}</div>`;
   document.getElementById('priceTables').innerHTML=html;
+}
+async function saveExtras(){
+  const ex={}; EXTRA_DEF.forEach(e=>{ ex[e.key]=Number(document.getElementById('ex-'+e.key).value)||1; });
+  const merged=Object.assign({},SETTINGS,{extras:ex});
+  if(await savePricing('settings',merged)){ SETTINGS=merged; renderPriceTables(); renderFormExtras(); renderCalcExtras(); onRankChange&&onRankChange(); }
 }
 async function saveRankValues(){
   const nv={}; RANK_ORDER.forEach(r=>{ nv[r]=Number(document.getElementById('rv-'+RANK_SHORT[r]).value)||0; });

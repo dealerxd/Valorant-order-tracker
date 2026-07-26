@@ -21,9 +21,18 @@ function onTypeChange(){
   document.getElementById('grpRank').classList.toggle('hidden',t!=='rank');
   document.getElementById('grpUnit').classList.toggle('hidden',!(t==='netwin'||t==='placement'));
   document.getElementById('grpCustom').classList.toggle('hidden',t!=='custom');
+  document.getElementById('grpExtras').classList.toggle('hidden',t==='custom');
   document.getElementById('unitCountLabel').textContent = t==='placement' ? 'Maç Sayısı' : 'Galibiyet Sayısı';
   onRankChange();
 }
+
+/* Extra toggle'ları (çarpanlar SETTINGS.extras'tan) */
+function renderFormExtras(){
+  const box=document.getElementById('extrasBox'); if(!box) return;
+  const checked=formSelectedExtras();
+  box.innerHTML=EXTRA_DEF.map(e=>`<label class="tg"><input type="checkbox" id="fx-${e.key}" ${checked.includes(e.key)?'checked':''} onchange="onRankChange()"><span class="sw"></span>${e.label} <b>×${extraMultOf(e.key).toLocaleString('tr-TR')}</b></label>`).join('');
+}
+function formSelectedExtras(){ return EXTRA_DEF.filter(e=>{const c=document.getElementById('fx-'+e.key);return c&&c.checked;}).map(e=>e.key); }
 
 function onPlatformChange(){
   const p = document.getElementById('platform').value;
@@ -38,22 +47,22 @@ function onPlatformChange(){
   onMoneyChange();
 }
 
-/* Türüne göre önerilen booster ücreti (fiyat listesinden) */
+/* Türüne göre önerilen booster ücreti (fiyat listesinden, extra çarpanları dahil) */
 function onRankChange(){
   const t=currentType();
   const s=document.getElementById('suggest');
   const pe=document.getElementById('payout');
+  const ex=formSelectedExtras();
   let total=null, label='';
   if(t==='rank'){
     const o=calcOffer(document.getElementById('baslangic').value,document.getElementById('hedef').value,{
-      startRR:document.getElementById('startRR').value,region:document.getElementById('region').value,
-      duo:document.getElementById('duo').checked,express:document.getElementById('express').checked});
+      startRR:document.getElementById('startRR').value,region:document.getElementById('region').value,extras:ex});
     if(o){ total=o.total; label='Fiyat listesine göre booster ücreti'; }
   } else if(t==='netwin'||t==='placement'){
     const rank=document.getElementById('unitRank').value;
     const n=Math.max(1,Number(document.getElementById('unitCount').value)||1);
     const unit=t==='netwin'?(NET_WIN_PRICE[rank]||0):placementPrice(rank);
-    if(unit>0){ total=unit*n; label=`${ORDER_TYPES[t]} · ${n} × ${unit.toLocaleString('tr-TR')} ₺`; }
+    if(unit>0){ total=Math.round(unit*n*extrasMult(ex)); label=`${ORDER_TYPES[t]} · ${n} × ${unit.toLocaleString('tr-TR')} ₺${ex.length?` × extras`:''}`; }
   }
   if(total!=null){
     if(!pe.dataset.manual) pe.value=total;
@@ -105,7 +114,8 @@ async function saveRecord(){
 
   const row={
     order_type:type,
-    baslangic:null, hedef:null, start_rr:0, region:'TR', duo:false, express:false,
+    baslangic:null, hedef:null, start_rr:0, region:'TR',
+    extras:type==='custom'?[]:formSelectedExtras(),
     win_count:null, job_desc:null,
     durum:document.getElementById('durum').value,tarih:document.getElementById('tarih').value||new Date().toISOString().slice(0,10),
     note:document.getElementById('not').value.trim(),image:formImage||null,
@@ -117,8 +127,6 @@ async function saveRecord(){
     row.hedef=document.getElementById('hedef').value;
     row.start_rr=Number(document.getElementById('startRR').value)||0;
     row.region=document.getElementById('region').value;
-    row.duo=document.getElementById('duo').checked;
-    row.express=document.getElementById('express').checked;
   } else if(type==='netwin'||type==='placement'){
     row.baslangic=document.getElementById('unitRank').value;
     row.win_count=Math.max(1,Number(document.getElementById('unitCount').value)||1);
@@ -156,8 +164,9 @@ function editRecord(id){
   } else {
     document.getElementById('baslangic').value=r.baslangic;document.getElementById('hedef').value=r.hedef;
     document.getElementById('startRR').value=r.startRR;document.getElementById('region').value=r.region;
-    document.getElementById('duo').checked=r.duo;document.getElementById('express').checked=r.express;
   }
+  renderFormExtras();
+  EXTRA_DEF.forEach(e=>{const c=document.getElementById('fx-'+e.key);if(c)c.checked=(r.extras||[]).includes(e.key);});
   document.getElementById('platform').value=f.platform||''; onPlatformChange();
   document.getElementById('platformRef').value=f.platformRef||'';
   document.getElementById('cost').value=f.cost||'';document.getElementById('currency').value=f.costCur||'USD';
@@ -181,7 +190,7 @@ function resetForm(){
   document.getElementById('currency').value='USD';document.getElementById('payout').dataset.manual='';
   document.getElementById('boosterSel').value='';document.getElementById('durum').value='yeni';
   document.getElementById('startRR').value='0';document.getElementById('region').value='TR';
-  document.getElementById('duo').checked=false;document.getElementById('express').checked=false;
+  document.getElementById('extrasBox').innerHTML='';renderFormExtras();
   document.getElementById('tarih').value=new Date().toISOString().slice(0,10);
   fillRankSelects();onTypeChange();showFormImage();toggleImageField();
   document.getElementById('formTitle').textContent='Yeni Sipariş';
@@ -281,7 +290,7 @@ function render(){
           <span class="chip">🗓 ${r.tarih}</span>
           ${r.orderType==='rank'&&r.startRR?`<span class="chip">RR ${r.startRR}</span>`:''}
           ${r.orderType==='rank'&&r.region!=='TR'?`<span class="chip">🌍 ${esc(r.region)}</span>`:''}
-          ${r.duo?`<span class="chip">👥 Duo</span>`:''}${r.express?`<span class="chip">⚡ Express</span>`:''}
+          ${(r.extras||[]).map(k=>`<span class="chip">✚ ${esc(extraLabel(k))}</span>`).join('')}
           ${r.payout>0?`<span class="chip ${r.paid?'paid':'unpaid'}">${r.paid?'✓ ödendi':'● ödenmedi'}</span>`:''}
         </div>
       </div><div style="text-align:right">${priceBlock}
