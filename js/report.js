@@ -24,7 +24,8 @@ function renderArchive(){
       <td class="r">${fmt(net,'TRY')}</td>
       <td class="r">${r.payout.toLocaleString('tr-TR')}</td>
       <td class="r fiyat" style="color:${kar<0?'var(--red)':'var(--green)'}">${fmt(kar,'TRY')}</td>
-      <td class="r"><button class="icon-btn" title="Arşivden çıkar" onclick="toggleArchive('${r.id}',false)">↩</button></td>
+      <td class="r" style="white-space:nowrap"><button class="icon-btn" title="Arşivden çıkar" onclick="toggleArchive('${r.id}',false)">↩</button>
+        <button class="icon-btn del" title="Kalıcı sil" onclick="deleteRecord('${r.id}')">🗑</button></td>
     </tr>`;
   }).join('');
   el.innerHTML=`<table>

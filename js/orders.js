@@ -217,6 +217,13 @@ function closeLightbox(){document.getElementById('lightbox').classList.add('hidd
 async function setStatus(id,durum){const {error}=await sb.from('resells').update({durum}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
 async function togglePaid(id,val){const {error}=await sb.from('resells').update({paid:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
 async function toggleArchive(id,val){const {error}=await sb.from('resells').update({archived:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
+async function deleteRecord(id){
+  if(!confirm('Bu sipariş KALICI olarak silinecek (finans kaydıyla birlikte). Geri alınamaz. Emin misin?')) return;
+  const {error}=await sb.from('resells').delete().eq('id',id);
+  if(error){alert('Silinemedi: '+error.message);return;}
+  if(editId===id) resetForm();
+  await loadAll();
+}
 async function addShot(id,input){const f=input.files[0];if(!f)return;input.value='';const d=await compressImage(f);
   const {error}=await sb.from('resells').update({image:d}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
 
@@ -315,6 +322,7 @@ function render(){
         ${isAdmin()?`<button class="icon-btn" onclick="editRecord('${r.id}')">✎ Düzenle</button>`:''}
         ${isAdmin()&&r.payout>0?`<button class="icon-btn" onclick="togglePaid('${r.id}',${!r.paid})">${r.paid?'↺ Ödeme geri':'💰 Ödendi'}</button>`:''}
         ${isAdmin()?`<button class="icon-btn" onclick="toggleArchive('${r.id}',${!r.archived})">${r.archived?'↩ Arşivden çıkar':'🗄 Arşivle'}</button>`:''}
+        ${isAdmin()?`<button class="icon-btn del" onclick="deleteRecord('${r.id}')">🗑 Sil</button>`:''}
         <input type="file" id="shot-${r.id}" accept="image/*" class="hidden" onchange="addShot('${r.id}',this)">
       </div></div>`;
   }).join('');
