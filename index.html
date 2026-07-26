@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resell.bot — HILL Boosting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0a0a0b;--panel:#121214;--panel-2:#16161a;--line:#26262c;--line-soft:#1d1d22;
+    --text:#ececf0;--muted:#8b8b95;--gold:#d4af37;--gold-soft:#b8962f;--silver:#c7ccd4;
+    --green:#3ecf8e;--amber:#e0a534;--blue:#5a9ded;--red:#e25555;--radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',sans-serif;
+    background:radial-gradient(900px 500px at 80% -10%,rgba(212,175,55,.07),transparent 60%),
+      radial-gradient(700px 400px at 0% 0%,rgba(199,204,212,.04),transparent 55%),var(--bg);
+    color:var(--text);min-height:100vh;padding:24px 18px 60px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--line-soft)}
+  .brand{display:flex;align-items:center;gap:14px}
+  .logo{width:44px;height:44px;flex-shrink:0;filter:drop-shadow(0 2px 8px rgba(212,175,55,.25))}
+  .brand h1{font-family:'Oswald',sans-serif;font-weight:700;font-size:24px;letter-spacing:1.5px;line-height:1;text-transform:uppercase}
+  .brand h1 .dot{color:var(--gold)}
+  .brand p{font-size:11px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:5px}
+  .header-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+  .sync-pill{font-size:11px;color:var(--muted);border:1px solid var(--line-soft);border-radius:20px;padding:5px 11px}
+  .sync-pill.ok{color:var(--green);border-color:rgba(62,207,142,.3)}
+  .sync-pill.err{color:var(--red);border-color:rgba(226,85,85,.3)}
+  .who{font-size:12px;color:var(--silver);display:flex;align-items:center;gap:7px}
+  .role-chip{font-family:'Oswald',sans-serif;font-size:10px;letter-spacing:1px;text-transform:uppercase;
+    padding:3px 9px;border-radius:20px;background:rgba(212,175,55,.13);color:var(--gold);border:1px solid rgba(212,175,55,.3)}
+  .role-chip.booster{background:rgba(90,157,237,.13);color:var(--blue);border-color:rgba(90,157,237,.3)}
+
+  .auth{position:fixed;inset:0;background:rgba(8,8,10,.96);display:flex;align-items:center;justify-content:center;z-index:2000;padding:24px}
+  .auth-card{background:linear-gradient(170deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:16px;padding:30px;max-width:400px;width:100%}
+  .auth-card .lg{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+  .auth-card h2{font-family:'Oswald',sans-serif;font-size:20px;letter-spacing:1px;text-transform:uppercase}
+  .auth-card h2 .dot{color:var(--gold)}
+  .auth-tabs{display:flex;gap:6px;background:#0d0d0f;padding:5px;border-radius:10px;margin-bottom:18px}
+  .auth-tabs button{flex:1;padding:8px;border:none;background:transparent;color:var(--muted);border-radius:7px;
+    font-family:'Oswald',sans-serif;letter-spacing:.5px;font-size:13px;cursor:pointer;text-transform:uppercase}
+  .auth-tabs button.active{background:#1f1c14;color:var(--gold)}
+  .auth-msg{font-size:12px;padding:10px 12px;border-radius:8px;margin-bottom:12px;line-height:1.5;display:none}
+  .auth-msg.err{display:block;background:rgba(226,85,85,.1);color:#ff9b9b;border:1px solid rgba(226,85,85,.3)}
+  .auth-msg.ok{display:block;background:rgba(62,207,142,.1);color:#8ff0c4;border:1px solid rgba(62,207,142,.3)}
+
+  .stats{display:grid;gap:12px;margin-bottom:24px}
+  .stat{background:linear-gradient(160deg,var(--panel),var(--panel-2));border:1px solid var(--line-soft);
+    border-radius:var(--radius);padding:15px;position:relative;overflow:hidden}
+  .stat::before{content:"";position:absolute;top:0;left:0;width:3px;height:100%;background:linear-gradient(var(--gold),var(--gold-soft))}
+  .stat .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px}
+  .stat .value{font-family:'Oswald',sans-serif;font-size:24px;font-weight:600;margin-top:5px}
+  .stat .value small{font-size:12px;color:var(--muted)}
+  .stat.gold .value{color:var(--gold)}.stat.green .value{color:var(--green)}
+  .stat.red .value{color:var(--red)}.stat.blue .value{color:var(--blue)}.stat.amber .value{color:var(--amber)}
+
+  .tabs{display:flex;gap:6px;margin-bottom:22px;background:var(--panel);padding:6px;border-radius:12px;border:1px solid var(--line-soft);width:fit-content;flex-wrap:wrap}
+  .tab{padding:9px 18px;border-radius:8px;border:none;background:transparent;color:var(--muted);
+    font-family:'Oswald',sans-serif;font-weight:500;letter-spacing:.5px;font-size:14px;cursor:pointer;transition:.18s;text-transform:uppercase}
+  .tab:hover{color:var(--text)}
+  .tab.active{background:linear-gradient(160deg,#2a2419,#1f1c14);color:var(--gold);box-shadow:inset 0 0 0 1px rgba(212,175,55,.3)}
+
+  .grid{display:grid;grid-template-columns:390px 1fr;gap:22px;align-items:start}
+  .panel{background:linear-gradient(170deg,var(--panel),var(--panel-2));border:1px solid var(--line-soft);border-radius:var(--radius);padding:22px}
+  .panel h2{font-family:'Oswald',sans-serif;font-size:16px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+    margin-bottom:18px;display:flex;align-items:center;gap:9px}
+  .panel h2 .bar{width:4px;height:18px;background:var(--gold);border-radius:2px}
+
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+  .field input,.field select,.field textarea{width:100%;background:#0d0d0f;border:1px solid var(--line);border-radius:9px;
+    color:var(--text);padding:11px 12px;font-family:'Inter',sans-serif;font-size:14px;transition:.15s}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--gold-soft);box-shadow:0 0 0 3px rgba(212,175,55,.12)}
+  .field textarea{resize:vertical;min-height:56px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .three{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+  .suggest{font-size:12px;color:var(--muted);margin:-6px 0 14px;min-height:16px}
+  .suggest b{color:var(--gold)}
+  .suggest .use{color:var(--blue);cursor:pointer;text-decoration:underline;margin-left:6px}
+
+  .toggles{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+  .tg{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--silver);cursor:pointer;user-select:none}
+  .tg b{color:var(--gold);font-weight:600}.tg input{display:none}
+  .tg .sw{width:38px;height:21px;border-radius:20px;background:#26262c;position:relative;transition:.2s;flex-shrink:0;border:1px solid var(--line)}
+  .tg .sw::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#6a6a72;transition:.2s}
+  .tg input:checked + .sw{background:rgba(212,175,55,.25);border-color:var(--gold-soft)}
+  .tg input:checked + .sw::after{transform:translateX(17px);background:var(--gold)}
+
+  .money{background:#0e0e11;border:1px solid var(--line-soft);border-radius:11px;padding:14px;margin-bottom:14px}
+  .money .row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--muted)}
+  .money .row b{font-family:'Oswald',sans-serif;font-size:15px}
+  .money .kar b{color:var(--green)}.money .neg b{color:var(--red)}
+
+  .btn{border:none;border-radius:9px;padding:11px 18px;font-family:'Oswald',sans-serif;font-weight:600;
+    letter-spacing:.8px;font-size:14px;cursor:pointer;transition:.18s;text-transform:uppercase}
+  .btn-gold{background:linear-gradient(160deg,var(--gold),var(--gold-soft));color:#1a1505;width:100%}
+  .btn-gold:hover{filter:brightness(1.08)}.btn-gold:disabled{opacity:.5;cursor:default}
+  .btn-ghost{background:#1c1c20;color:var(--text);border:1px solid var(--line)}
+  .btn-ghost:hover{border-color:var(--gold-soft);color:var(--gold)}
+  .btn-sm{padding:7px 13px;font-size:12px}
+
+  .toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+  .toolbar input,.toolbar select{background:#0d0d0f;border:1px solid var(--line);border-radius:9px;color:var(--text);padding:9px 11px;font-size:13px;font-family:'Inter',sans-serif}
+  .toolbar input.search{flex:1;min-width:150px}
+
+  .rec{background:#0e0e11;border:1px solid var(--line-soft);border-radius:12px;padding:15px 16px;margin-bottom:11px}
+  .rec.arch{opacity:.6}
+  .rec-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
+  .rec-route{font-family:'Oswald',sans-serif;font-size:17px;font-weight:600;letter-spacing:.4px}
+  .rec-route .arrow{color:var(--gold);margin:0 6px}
+  .rec-price{font-family:'Oswald',sans-serif;font-size:20px;font-weight:700;color:var(--gold);white-space:nowrap}
+  .rec-sub{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap}
+  .rec-sub .kar{color:var(--green)}
+  .rec-meta{display:flex;gap:7px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)}
+  .chip{display:inline-flex;align-items:center;gap:5px;background:#1a1a1f;border:1px solid var(--line-soft);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--silver)}
+  .chip.booster{border-color:rgba(90,157,237,.35);color:var(--blue)}
+  .chip.unpaid{border-color:rgba(226,85,85,.35);color:var(--red)}
+  .chip.paid{border-color:rgba(62,207,142,.35);color:var(--green)}
+  .status{font-family:'Oswald',sans-serif;font-size:11px;font-weight:600;letter-spacing:.5px;padding:3px 11px;border-radius:20px;text-transform:uppercase}
+  .status.yeni{background:rgba(139,139,149,.13);color:var(--muted);border:1px solid rgba(139,139,149,.3)}
+  .status.atandi{background:rgba(224,165,52,.13);color:var(--amber);border:1px solid rgba(224,165,52,.3)}
+  .status.devam{background:rgba(90,157,237,.13);color:var(--blue);border:1px solid rgba(90,157,237,.3)}
+  .status.tamam{background:rgba(62,207,142,.13);color:var(--green);border:1px solid rgba(62,207,142,.3)}
+  .status.odendi{background:rgba(212,175,55,.13);color:var(--gold);border:1px solid rgba(212,175,55,.3)}
+  .rec-note{font-size:13px;color:#b9b9c2;margin-top:9px;padding-top:9px;border-top:1px dashed var(--line-soft);line-height:1.5;white-space:pre-wrap}
+  .rec-actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap}
+  .icon-btn{background:transparent;border:1px solid var(--line);border-radius:7px;color:var(--muted);padding:5px 11px;font-size:12px;cursor:pointer;transition:.15s;font-family:'Inter',sans-serif}
+  .icon-btn:hover{color:var(--text);border-color:var(--gold-soft)}
+  .icon-btn.del:hover{color:var(--red);border-color:var(--red)}
+  .icon-btn.go{border-color:rgba(62,207,142,.35);color:var(--green)}
+  .rec-shot{margin-top:10px}
+  .rec-shot img{max-height:120px;max-width:100%;border-radius:8px;border:1px solid var(--line);cursor:zoom-in}
+  .img-drop{border:1.5px dashed var(--line);border-radius:10px;padding:16px;text-align:center;color:var(--muted);cursor:pointer;font-size:13px;background:#0d0d0f}
+  .img-drop:hover{border-color:var(--gold-soft);color:var(--gold)}
+  .img-drop img{max-width:100%;max-height:200px;border-radius:8px;display:block;margin:0 auto}
+  .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;z-index:1000;padding:30px;cursor:zoom-out}
+  .lightbox img{max-width:100%;max-height:100%;border-radius:10px}
+
+  .empty{text-align:center;padding:54px 20px;color:var(--muted)}
+  .empty .big{font-family:'Oswald',sans-serif;font-size:18px;color:var(--silver);margin-bottom:6px;letter-spacing:1px}
+
+  .price-block{margin-bottom:26px}
+  .price-block h3{font-family:'Oswald',sans-serif;font-size:15px;letter-spacing:1px;text-transform:uppercase;color:var(--silver);margin-bottom:12px;display:flex;align-items:center;gap:9px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line)}
+  th.r,td.r{text-align:right}
+  td{padding:9px 12px;border-bottom:1px solid var(--line-soft)}
+  td.fiyat{font-family:'Oswald',sans-serif;font-weight:600;color:var(--gold);font-size:15px}
+  td input.pedit{width:90px;background:#0d0d0f;border:1px solid var(--line);border-radius:7px;color:var(--gold);
+    padding:6px 8px;font-size:14px;font-family:'Oswald',sans-serif;text-align:right}
+  .matrix-wrap{overflow-x:auto;border:1px solid var(--line-soft);border-radius:10px;max-height:70vh}
+  table.matrix{border-collapse:separate;border-spacing:0;font-size:12px;min-width:max-content}
+  table.matrix th,table.matrix td{padding:6px 10px;border-bottom:1px solid var(--line-soft);border-right:1px solid var(--line-soft);white-space:nowrap;text-align:right}
+  table.matrix thead th{position:sticky;top:0;background:#1a1a1f;color:var(--muted);font-size:11px;z-index:1}
+  table.matrix th.rk{position:sticky;left:0;background:#1a1a1f;text-align:left;color:var(--silver);font-family:'Inter',sans-serif;z-index:1}
+  table.matrix thead th.rk{z-index:3}table.matrix tbody th.rk{z-index:2}
+  table.matrix td.fiyat{font-size:13px}table.matrix td.dim{color:#33333a;text-align:center}
+
+  .invite-box{background:#0e0e11;border:1px solid rgba(212,175,55,.3);border-radius:10px;padding:14px;margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .invite-code{font-family:ui-monospace,monospace;font-size:18px;color:var(--gold);letter-spacing:2px;background:#141419;padding:8px 14px;border-radius:8px;border:1px solid var(--line)}
+
+  .hidden{display:none}
+  ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:#2a2a30;border-radius:5px}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- GİRİŞ -->
+<div class="auth" id="authScreen">
+  <div class="auth-card">
+    <div class="lg">
+      <svg width="38" height="38" viewBox="0 0 64 64"><defs><linearGradient id="ag" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#e8c95a"/><stop offset="1" stop-color="#b8962f"/></linearGradient></defs>
+        <path d="M4 52 L22 20 L32 36 L40 24 L60 52 Z" fill="url(#ag)"/></svg>
+      <h2>RESELL<span class="dot">.</span>BOT</h2>
+    </div>
+    <div class="auth-tabs">
+      <button id="tabLogin" class="active" onclick="setAuthMode('login')">Giriş</button>
+      <button id="tabSignup" onclick="setAuthMode('signup')">Kayıt Ol</button>
+    </div>
+    <div class="auth-msg" id="authMsg"></div>
+    <div class="field hidden" id="nameField"><label>Görünen Ad / Rumuz</label><input type="text" id="authName" placeholder="örn. Xarien"></div>
+    <div class="field hidden" id="codeField"><label>Davet Kodu</label><input type="text" id="authCode" placeholder="Sana verilen kod"></div>
+    <div class="field"><label>E-posta</label><input type="email" id="authEmail" placeholder="mail@ornek.com"></div>
+    <div class="field"><label>Şifre</label><input type="password" id="authPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAuth()"></div>
+    <button class="btn btn-gold" id="authBtn" onclick="doAuth()">Giriş Yap</button>
+  </div>
+</div>
+
+<div class="wrap hidden" id="app">
+  <header>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 64 64" fill="none">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e8c95a"/><stop offset="1" stop-color="#b8962f"/></linearGradient></defs>
+        <path d="M4 52 L22 20 L32 36 L40 24 L60 52 Z" fill="url(#g)"/><path d="M22 20 L32 36 L26 36 Z" fill="#1a1505" opacity=".25"/></svg>
+      <div><h1>RESELL<span class="dot">.</span>BOT</h1><p>HILL Boosting</p></div>
+    </div>
+    <div class="header-actions">
+      <span class="who" id="whoAmI"></span>
+      <span id="syncStatus" class="sync-pill">● bağlanıyor…</span>
+      <button class="btn btn-ghost btn-sm" onclick="loadAll()">↻ Yenile</button>
+      <button class="btn btn-ghost btn-sm" onclick="signOut()">Çıkış</button>
+    </div>
+  </header>
+
+  <div class="stats" id="statsRow"></div>
+  <div class="tabs" id="tabBar"></div>
+
+  <!-- SİPARİŞLER -->
+  <div id="tab-siparis" class="grid">
+    <div class="panel" id="formPanel">
+      <h2><span class="bar"></span><span id="formTitle">Yeni Sipariş</span></h2>
+      <div class="field"><label>Hangi Panelden</label>
+        <select id="platform" onchange="onPlatformChange()">
+          <option value="">— seç —</option>
+          <option value="Eldorado">Eldorado ($)</option>
+          <option value="GameBoost">GameBoost (€)</option>
+          <option value="Diğer">Diğer</option>
+        </select>
+      </div>
+      <div class="field"><label>Panel Sipariş No</label><input type="text" id="platformRef" placeholder="opsiyonel"></div>
+      <div class="field"><label>Booster</label><select id="boosterSel" onchange="onRankChange()"></select></div>
+      <div class="two">
+        <div class="field"><label>Başlangıç</label><select id="baslangic" onchange="onRankChange()"></select></div>
+        <div class="field"><label>Hedef</label><select id="hedef" onchange="onRankChange()"></select></div>
+      </div>
+      <div class="two">
+        <div class="field"><label>Başlangıç RR</label><input type="number" id="startRR" min="0" max="99" value="0" oninput="onRankChange()"></div>
+        <div class="field"><label>Bölge</label><select id="region" onchange="onRankChange()">
+          <option value="TR">TR</option><option value="EU">EU</option><option value="NA">NA</option><option value="Diğer">Diğer</option></select></div>
+      </div>
+      <div class="toggles">
+        <label class="tg"><input type="checkbox" id="duo" onchange="onRankChange()"><span class="sw"></span>Duo <b>×2.00</b></label>
+        <label class="tg"><input type="checkbox" id="express" onchange="onRankChange()"><span class="sw"></span>Express <b>×1.05</b></label>
+      </div>
+
+      <div class="three">
+        <div class="field"><label>Panel Maliyeti</label><input type="number" id="cost" placeholder="0" min="0" step="0.01" oninput="onMoneyChange()"></div>
+        <div class="field"><label>Birim</label><select id="currency" onchange="onMoneyChange()">
+          <option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="TRY">₺ TL</option></select></div>
+      </div>
+      <div class="field" style="margin-bottom:8px"><label>Panel Komisyonu %</label>
+        <select id="feePct" onchange="onMoneyChange()"><option value="0">%0</option><option value="10">%10</option><option value="45">%45</option></select>
+      </div>
+      <div class="field" style="margin-bottom:8px" id="rateField"><label>Kur (1 birim = ? TL) — elle gir</label><input type="number" id="rate" placeholder="örn. 34" min="0" step="0.01" oninput="onMoneyChange()"></div>
+      <div class="field" style="margin-bottom:8px"><label>Resell Fiyatı (TL) — senin gelirin</label><input type="number" id="salePrice" placeholder="0" min="0" oninput="onMoneyChange()"></div>
+      <div class="field" style="margin-bottom:8px"><label>Booster'a Ödenecek (TL)</label><input type="number" id="payout" placeholder="0" min="0" oninput="onMoneyChange()"></div>
+      <div class="suggest" id="suggest"></div>
+      <div class="money" id="moneyBox"></div>
+      <div class="two">
+        <div class="field"><label>Durum</label><select id="durum" onchange="toggleImageField()">
+          <option value="yeni">Yeni</option><option value="atandi">Atandı</option><option value="devam">Devam</option>
+          <option value="tamam">Tamamlandı</option><option value="odendi">Ödendi</option></select></div>
+        <div class="field"><label>Tarih</label><input type="date" id="tarih"></div>
+      </div>
+      <div class="field hidden" id="imageField"><label>Bitiş Ekran Görüntüsü</label>
+        <div class="img-drop" onclick="document.getElementById('imgInput').click()">
+          <span id="imgDropText">📷 Görsel seç / Ctrl+V</span><img id="imgPreview" class="hidden" alt=""></div>
+        <input type="file" id="imgInput" accept="image/*" class="hidden" onchange="handleImagePick(event)">
+        <button type="button" class="icon-btn del hidden" id="imgRemove" onclick="clearFormImage()" style="margin-top:8px">🗑 Kaldır</button>
+      </div>
+      <div class="field"><label>Not</label><textarea id="not" placeholder="Detay, teslim notu..."></textarea></div>
+      <button class="btn btn-gold" id="saveBtn" onclick="saveRecord()">Kaydet</button>
+      <button class="btn btn-ghost hidden" id="cancelBtn" onclick="resetForm()" style="width:100%;margin-top:8px">İptal</button>
+    </div>
+    <div>
+      <div class="toolbar">
+        <input class="search" type="text" id="search" placeholder="🔍 Ara" oninput="render()">
+        <select id="filterDurum" onchange="render()"><option value="">Tüm Durumlar</option>
+          <option value="yeni">Yeni</option><option value="atandi">Atandı</option><option value="devam">Devam</option>
+          <option value="tamam">Tamamlandı</option><option value="odendi">Ödendi</option></select>
+        <select id="filterBooster" onchange="render()"></select>
+        <select id="filterArchive" onchange="render()"><option value="active">Aktifler</option><option value="arch">Arşiv</option><option value="all">Hepsi</option></select>
+      </div>
+      <div id="recordList"></div>
+    </div>
+  </div>
+
+  <!-- RAPOR -->
+  <div id="tab-rapor" class="panel hidden">
+    <h2><span class="bar"></span>Rapor</h2>
+    <div class="toolbar">
+      <label style="font-size:12px;color:var(--muted)">Başlangıç <input type="date" id="repFrom" onchange="renderReport()"></label>
+      <label style="font-size:12px;color:var(--muted)">Bitiş <input type="date" id="repTo" onchange="renderReport()"></label>
+      <button class="icon-btn" onclick="clearReportDates()">Tümü</button>
+    </div>
+    <div id="reportBody"></div>
+  </div>
+
+  <!-- BOOSTERLAR -->
+  <div id="tab-boosterlar" class="panel hidden">
+    <h2><span class="bar"></span>Boosterlar & Davet</h2>
+    <div class="invite-box">
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Yeni davet kodu</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="invite-code" id="newCode">— — —</span>
+          <button class="icon-btn" onclick="copyCode()">Kopyala</button>
+        </div>
+      </div>
+      <button class="btn btn-gold btn-sm" style="width:auto" onclick="genInvite()">+ Kod Üret</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Kodu booster'a ver; o kayıt olurken girsin. Her kod tek kullanımlık. Kodla giren otomatik aktif olur.</p>
+    <div id="inviteList" style="margin-bottom:20px"></div>
+    <div id="boosterList"></div>
+  </div>
+
+  <!-- HESAPLAYICI -->
+  <div id="tab-hesap" class="panel hidden" style="max-width:680px">
+    <h2><span class="bar"></span>Fiyat Hesaplayıcı</h2>
+    <div class="two">
+      <div class="field"><label>From</label><select id="cFrom" onchange="calcRender()"></select></div>
+      <div class="field"><label>To</label><select id="cTo" onchange="calcRender()"></select></div>
+    </div>
+    <div class="two">
+      <div class="field"><label>Bölge</label><select id="cRegion" onchange="calcRender()">
+        <option value="TR">TR</option><option value="EU">EU</option><option value="NA">NA</option><option value="Diğer">Diğer</option></select></div>
+      <div class="field"><label>Başlangıç RR</label><input type="number" id="cRR" min="0" max="99" value="0" oninput="calcRender()"></div>
+    </div>
+    <div class="toggles" style="flex-direction:row;gap:24px;margin-bottom:4px">
+      <label class="tg"><input type="checkbox" id="cDuo" onchange="calcRender()"><span class="sw"></span>Duo</label>
+      <label class="tg"><input type="checkbox" id="cExpress" onchange="calcRender()"><span class="sw"></span>Express</label>
+    </div>
+    <div id="offerBox"></div>
+  </div>
+
+  <!-- FİYAT LİSTESİ (düzenlenebilir) -->
+  <div id="tab-fiyat" class="panel hidden">
+    <h2><span class="bar"></span>Booster Fiyat Listesi</h2>
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px" id="fiyatHint"></p>
+    <div id="priceTables"></div>
+  </div>
+
+  <div class="lightbox hidden" id="lightbox" onclick="closeLightbox()"><img id="lightboxImg" alt=""></div>
+</div>
+
+<script>
+/* ============ SUPABASE ============ */
+const SUPABASE_URL = "https://yhrvpgkxywwgeelhjszb.supabase.co";
+const SUPABASE_KEY = "sb_publishable_zwHVMn87dm7xJ1aB-_p7Xg_iUypsY-L";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const CUR = { TRY:'₺', USD:'$', EUR:'€' };
+const fmt = (n,c)=> (CUR[c]||'') + Number(n||0).toLocaleString('tr-TR');
+
+/* ============ PANEL AYARLARI ============ */
+// Panel: alış para birimi + komisyon seçenekleri (kur elle girilir)
+const PLATFORMS = {
+  "Eldorado":  { cur:'USD', fees:[10] },
+  "GameBoost": { cur:'EUR', fees:[10,45] }
+};
+
+/* ============ FİYAT MOTORU (DB'den yüklenir) ============ */
+const RANK_ORDER = ["Bronze 1","Bronze 2","Bronze 3","Silver 1","Silver 2","Silver 3","Gold 1","Gold 2","Gold 3",
+  "Plat 1","Plat 2","Plat 3","Diamond 1","Diamond 2","Diamond 3","Ascendant 1","Ascendant 2","Ascendant 3",
+  "Immortal 1","Immortal 2","Immortal 3"];
+let RANK_VALUE = {}, NET_WIN_PRICE = {}, SETTINGS = {price_mult:1.25,placement_factor:0.5,duo_mult:2.0,express_mult:1.05};
+const REGION_MULT = { "TR":1.00,"EU":1.00,"NA":1.05,"Diğer":1.10 };
+const placementPrice = r => Math.round((NET_WIN_PRICE[r]||0)*SETTINGS.placement_factor);
+
+function calcOffer(from,to,opts){
+  opts=opts||{};
+  const fi=RANK_ORDER.indexOf(from), ti=RANK_ORDER.indexOf(to);
+  if(fi<0||ti<0||ti<=fi) return null;
+  const base=Math.round((RANK_VALUE[to]-RANK_VALUE[from])*SETTINGS.price_mult);
+  const startRR=Math.max(0,Math.min(99,Number(opts.startRR)||0));
+  const firstDiv=(RANK_VALUE[RANK_ORDER[fi+1]]-RANK_VALUE[from])*SETTINGS.price_mult;
+  const rrDisc=Math.round(firstDiv*(startRR/100));
+  let total=base-rrDisc;
+  const rm=REGION_MULT[opts.region||'TR']!=null?REGION_MULT[opts.region||'TR']:1;
+  total*=rm; if(opts.duo)total*=SETTINGS.duo_mult; if(opts.express)total*=SETTINGS.express_mult;
+  return {base,rrDisc,startRR,region:opts.region||'TR',regionMult:rm,duo:!!opts.duo,express:!!opts.express,total:Math.round(total)};
+}
+const suggestedPrice=(f,t)=>{const o=calcOffer(f,t);return o?o.base:null;};
+
+/* ============ DURUM ============ */
+let me=null, records=[], finance={}, people=[], invites=[], formImage=null, editId=null;
+const isAdmin=()=> me && me.role==='admin';
+
+/* ============ AUTH ============ */
+let authMode='login';
+function setAuthMode(m){
+  authMode=m;
+  document.getElementById('tabLogin').classList.toggle('active',m==='login');
+  document.getElementById('tabSignup').classList.toggle('active',m==='signup');
+  document.getElementById('nameField').classList.toggle('hidden',m!=='signup');
+  document.getElementById('codeField').classList.toggle('hidden',m!=='signup');
+  document.getElementById('authBtn').textContent=m==='login'?'Giriş Yap':'Kayıt Ol';
+  authMsg('');
+}
+function authMsg(t,type){const el=document.getElementById('authMsg');el.className='auth-msg'+(t?' '+(type||'err'):'');el.textContent=t||'';}
+async function doAuth(){
+  const email=document.getElementById('authEmail').value.trim();
+  const pass=document.getElementById('authPass').value;
+  if(!email||!pass){authMsg('E-posta ve şifre gerekli.');return;}
+  const btn=document.getElementById('authBtn');btn.disabled=true;
+  try{
+    if(authMode==='signup'){
+      const name=document.getElementById('authName').value.trim();
+      const code=document.getElementById('authCode').value.trim();
+      if(!name){authMsg('Görünen ad gerekli.');return;}
+      const { error }=await sb.auth.signUp({email,password:pass,options:{data:{display_name:name,invite_code:code}}});
+      if(error) throw error;
+      authMsg('Kayıt alındı. Şimdi giriş yapabilirsin.','ok');
+      setTimeout(()=>setAuthMode('login'),2000);
+    } else {
+      const { error }=await sb.auth.signInWithPassword({email,password:pass});
+      if(error) throw error;
+      await afterLogin();
+    }
+  }catch(e){ authMsg(e.message||'Hata.'); }
+  finally{ btn.disabled=false; }
+}
+async function signOut(){ await sb.auth.signOut(); location.reload(); }
+
+async function afterLogin(){
+  const { data:{ user } }=await sb.auth.getUser();
+  if(!user){ showAuth(); return; }
+  const { data,error }=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
+  if(error||!data){ authMsg('Profil okunamadı.'); showAuth(); return; }
+  me=data;
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('whoAmI').innerHTML=`${esc(me.display_name)} <span class="role-chip ${isAdmin()?'':'booster'}">${isAdmin()?'Admin':'Booster'}</span>`;
+  buildTabs(); applyRoleUI();
+  await loadPricing(); await loadAll(); subscribeRealtime();
+  onMoneyChange();
+}
+function showAuth(){ document.getElementById('app').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); }
+
+/* ============ FİYAT YÜKLE/KAYDET ============ */
+async function loadPricing(){
+  const { data }=await sb.from('pricing').select('*');
+  (data||[]).forEach(p=>{
+    if(p.id==='rank_values') RANK_VALUE=p.data;
+    if(p.id==='net_win') NET_WIN_PRICE=p.data;
+    if(p.id==='settings') SETTINGS=Object.assign(SETTINGS,p.data);
+  });
+  fillRankSelects(); fillCalcSelects();
+}
+async function savePricing(id,data){
+  const { error }=await sb.from('pricing').upsert({id,data,updated_at:new Date().toISOString()});
+  if(error){ alert('Fiyat kaydedilemedi: '+error.message); return false; }
+  return true;
+}
+
+/* ============ VERİ ============ */
+function setSync(s,t){const el=document.getElementById('syncStatus');el.className='sync-pill'+(s==='ok'?' ok':s==='err'?' err':'');el.textContent=t;}
+function rowToRec(r){
+  return {id:r.id,baslangic:r.baslangic,hedef:r.hedef,startRR:r.start_rr||0,region:r.region||'TR',
+    duo:!!r.duo,express:!!r.express,durum:r.durum||'yeni',tarih:r.tarih||'',not:r.note||'',image:r.image||null,
+    boosterId:r.booster_id||null,payout:Number(r.booster_payout)||0,paid:!!r.paid,
+    archived:!!r.archived,created:r.created_at||''};
+}
+async function loadAll(){
+  if(!me) return;
+  setSync('','● yükleniyor…');
+  const [rRes,pRes,fRes,iRes]=await Promise.all([
+    sb.from('resells').select('*').order('created_at',{ascending:false}),
+    sb.from('profiles').select('*').order('display_name'),
+    isAdmin()?sb.from('order_finance').select('*'):Promise.resolve({data:[]}),
+    isAdmin()?sb.from('invites').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]})
+  ]);
+  if(rRes.error){ setSync('err','● hata'); alert('Veri çekilemedi: '+rRes.error.message); return; }
+  records=(rRes.data||[]).map(rowToRec);
+  people=pRes.data||[];
+  invites=iRes.data||[];
+  finance={}; (fRes.data||[]).forEach(f=>finance[f.order_id]={
+    platform:f.platform||'', platformRef:f.platform_ref||'',
+    cost:Number(f.cost)||0, costCur:f.cost_currency||'USD', feePct:Number(f.fee_pct)||0,
+    costTL:Number(f.cost_tl)||0, rate:Number(f.rate)||0, sale:Number(f.sale_price)||0 });
+  setSync('ok','● bağlı · canlı');
+  fillBoosterSelects(); render();
+  if(isAdmin()){ renderBoosters(); renderInvites(); }
+}
+const F=id=>finance[id]||{platform:'',platformRef:'',cost:0,costCur:'USD',feePct:0,costTL:0,sale:0};
+const saleOf=id=>F(id).sale;
+const netCostTLof=id=>{const f=F(id);return Math.round(f.costTL*(1-f.feePct/100));};
+const komTLof=id=>{const f=F(id);return Math.round(f.costTL*f.feePct/100);};
+function subscribeRealtime(){ try{ sb.channel('rt').on('postgres_changes',{event:'*',schema:'public',table:'resells'},()=>loadAll()).subscribe(); }catch(e){} }
+
+/* ============ ROL / SEKME ============ */
+function buildTabs(){
+  const tabs=isAdmin()
+    ? [['siparis','Siparişler'],['rapor','Rapor'],['boosterlar','Boosterlar'],['hesap','Hesaplayıcı'],['fiyat','Fiyat Listesi']]
+    : [['siparis','İşlerim'],['fiyat','Fiyat Listesi']];
+  document.getElementById('tabBar').innerHTML=tabs.map((t,i)=>
+    `<button class="tab ${i===0?'active':''}" data-tab="${t[0]}" onclick="switchTab('${t[0]}')">${t[1]}</button>`).join('');
+}
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
+  ['siparis','rapor','boosterlar','hesap','fiyat'].forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('hidden',x!==t);});
+  if(t==='siparis'&&isAdmin()) document.getElementById('tab-siparis').classList.remove('hidden');
+  if(t==='rapor') renderReport();
+  if(t==='fiyat') renderPriceTables();
+}
+function applyRoleUI(){
+  if(!isAdmin()){
+    document.getElementById('formPanel').classList.add('hidden');
+    document.getElementById('tab-siparis').style.gridTemplateColumns='1fr';
+    document.getElementById('filterBooster').classList.add('hidden');
+  }
+}
+
+/* ============ FORM ============ */
+function fillRankSelects(){
+  const b=document.getElementById('baslangic'),h=document.getElementById('hedef');
+  if(!b) return; b.innerHTML='';h.innerHTML='';
+  RANK_ORDER.forEach(r=>{b.add(new Option(r,r));h.add(new Option(r,r));});
+  b.value='Gold 1';h.value='Diamond 1';
+}
+function fillBoosterSelects(){
+  const sel=document.getElementById('boosterSel'),flt=document.getElementById('filterBooster');
+  const list=people.filter(p=>p.active&&p.role==='booster');
+  const cur=sel.value,curF=flt.value;
+  sel.innerHTML='<option value="">— atanmadı —</option>'+list.map(p=>`<option value="${p.id}">${esc(p.display_name)}</option>`).join('');
+  flt.innerHTML='<option value="">Tüm Boosterlar</option>'+list.map(p=>`<option value="${p.id}">${esc(p.display_name)}</option>`).join('');
+  sel.value=cur;flt.value=curF;
+}
+function nameOf(id){const p=people.find(x=>x.id===id);return p?p.display_name:'—';}
+
+function onPlatformChange(){
+  const p = document.getElementById('platform').value;
+  const cfg = PLATFORMS[p];
+  if(cfg){
+    document.getElementById('currency').value = cfg.cur;
+    // komisyon seçeneklerini panele göre kısıtla
+    const fs = document.getElementById('feePct');
+    fs.innerHTML = '<option value="0">%0</option>' + cfg.fees.map(f=>`<option value="${f}">%${f}</option>`).join('');
+    fs.value = cfg.fees[0];
+  }
+  onMoneyChange();
+}
+function onRankChange(){
+  const o=calcOffer(document.getElementById('baslangic').value,document.getElementById('hedef').value,{
+    startRR:document.getElementById('startRR').value,region:document.getElementById('region').value,
+    duo:document.getElementById('duo').checked,express:document.getElementById('express').checked});
+  const s=document.getElementById('suggest');
+  const pe=document.getElementById('payout');
+  if(o){
+    if(!pe.dataset.manual) pe.value=o.total;
+    s.innerHTML=`Fiyat listesine göre booster ücreti: <b>${o.total.toLocaleString('tr-TR')} ₺</b>
+      <span class="use" onclick="document.getElementById('payout').value=${o.total};document.getElementById('payout').dataset.manual='';onMoneyChange()">kullan</span>`;
+  } else s.innerHTML='';
+  onMoneyChange();
+}
+function onMoneyChange(){
+  const cost=Number(document.getElementById('cost').value)||0;
+  const cur=document.getElementById('currency').value;
+  const feePct=Number(document.getElementById('feePct').value)||0;
+  const rate=Number(document.getElementById('rate').value)||0;
+  const sale=Number(document.getElementById('salePrice').value)||0;   // TL gelir
+  const pay=Number(document.getElementById('payout').value)||0;       // TL booster
+
+  const isTL = cur==='TRY';
+  document.getElementById('rateField').style.display = isTL ? 'none' : '';
+
+  const feeAmt = cost*feePct/100;
+  const netCost = cost - feeAmt;
+  const netCostTL = isTL ? Math.round(netCost) : Math.round(netCost*rate);
+  const kar = sale - netCostTL - pay;
+
+  const rateLine = !isTL ? `<div class="row"><span>Kur (1 ${cur})</span><b style="color:var(--muted)">${rate?rate.toLocaleString('tr-TR'):'—'} ₺</b></div>` : '';
+  const warn = (!isTL && !rate) ? `<div class="row"><span style="color:var(--amber)">⚠ Kuru gir</span><b></b></div>` : '';
+  document.getElementById('moneyBox').innerHTML=`
+    <div class="row"><span>Panel maliyeti</span><b>${fmt(cost,cur)}</b></div>
+    ${feePct>0?`<div class="row"><span>Komisyon (%${feePct})</span><b style="color:var(--amber)">−${fmt(Math.round(feeAmt*100)/100,cur)}</b></div>`:''}
+    <div class="row"><span>Net (${cur})</span><b>${fmt(Math.round(netCost*100)/100,cur)}</b></div>
+    ${rateLine}${warn}
+    <div class="row"><span>Net maliyet (TL)</span><b style="color:var(--blue)">${fmt(netCostTL,'TRY')}</b></div>
+    <div class="row"><span>Resell (gelir)</span><b>${fmt(sale,'TRY')}</b></div>
+    <div class="row"><span>Booster'a</span><b style="color:var(--blue)">−${fmt(pay,'TRY')}</b></div>
+    <div class="row ${kar<0?'neg':'kar'}"><span>Sana kalan kâr</span><b>${fmt(kar,'TRY')}</b></div>`;
+}
+document.addEventListener('input',e=>{ if(e.target&&e.target.id==='payout') e.target.dataset.manual='1'; });
+function toggleImageField(){const d=document.getElementById('durum').value;document.getElementById('imageField').classList.toggle('hidden',!(d==='tamam'||d==='odendi'));}
+
+async function saveRecord(){
+  const sale=Number(document.getElementById('salePrice').value)||0;
+  if(sale<=0){ alert('Resell fiyatını (TL) gir.'); return; }
+  const cost=Number(document.getElementById('cost').value)||0;
+  const cur=document.getElementById('currency').value;
+  const feePct=Number(document.getElementById('feePct').value)||0;
+  const rate=Number(document.getElementById('rate').value)||0;
+  const costTL = cur==='TRY' ? Math.round(cost) : Math.round(cost*rate);   // elle girilen kurla sabitlenir
+  if(cur!=='TRY' && !rate){ alert('Kuru gir (1 '+cur+' kaç TL).'); return; }
+  const row={
+    baslangic:document.getElementById('baslangic').value,hedef:document.getElementById('hedef').value,
+    start_rr:Number(document.getElementById('startRR').value)||0,region:document.getElementById('region').value,
+    duo:document.getElementById('duo').checked,express:document.getElementById('express').checked,
+    durum:document.getElementById('durum').value,tarih:document.getElementById('tarih').value||new Date().toISOString().slice(0,10),
+    note:document.getElementById('not').value.trim(),image:formImage||null,
+    booster_id:document.getElementById('boosterSel').value||null,
+    booster_payout:Number(document.getElementById('payout').value)||0
+  };
+  const fin={
+    sale_price:sale, currency:'TRY',
+    platform:document.getElementById('platform').value||null,
+    platform_ref:document.getElementById('platformRef').value.trim()||null,
+    cost:cost, cost_currency:cur, fee_pct:feePct, cost_tl:costTL, rate:rate
+  };
+  const btn=document.getElementById('saveBtn');btn.disabled=true;
+  try{
+    let id=editId;
+    if(editId){ const {error}=await sb.from('resells').update(row).eq('id',editId); if(error)throw error; }
+    else { const {data,error}=await sb.from('resells').insert(row).select('id').single(); if(error)throw error; id=data.id; }
+    const {error:fe}=await sb.from('order_finance').upsert(Object.assign({order_id:id},fin));
+    if(fe)throw fe;
+    resetForm(); await loadAll();
+  }catch(e){ alert('Kaydedilemedi: '+e.message); }
+  finally{ btn.disabled=false; }
+}
+function editRecord(id){
+  const r=records.find(x=>x.id===id); if(!r)return; editId=id; const f=F(id);
+  document.getElementById('boosterSel').value=r.boosterId||'';
+  document.getElementById('baslangic').value=r.baslangic;document.getElementById('hedef').value=r.hedef;
+  document.getElementById('startRR').value=r.startRR;document.getElementById('region').value=r.region;
+  document.getElementById('duo').checked=r.duo;document.getElementById('express').checked=r.express;
+  document.getElementById('platform').value=f.platform||''; onPlatformChange();
+  document.getElementById('platformRef').value=f.platformRef||'';
+  document.getElementById('cost').value=f.cost||'';document.getElementById('currency').value=f.costCur||'USD';
+  document.getElementById('feePct').value=f.feePct||0;
+  document.getElementById('rate').value=f.rate||'';
+  document.getElementById('salePrice').value=f.sale||'';
+  const pe=document.getElementById('payout');pe.value=r.payout||'';pe.dataset.manual='1';
+  document.getElementById('durum').value=r.durum;document.getElementById('tarih').value=r.tarih;
+  document.getElementById('not').value=r.not;formImage=r.image;
+  toggleImageField();showFormImage();onMoneyChange();
+  document.getElementById('formTitle').textContent='Siparişi Düzenle';
+  document.getElementById('saveBtn').textContent='Güncelle';
+  document.getElementById('cancelBtn').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function resetForm(){
+  editId=null;formImage=null;
+  ['salePrice','payout','not','cost','platformRef','rate'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('platform').value='';document.getElementById('feePct').value='0';
+  document.getElementById('currency').value='USD';document.getElementById('payout').dataset.manual='';
+  document.getElementById('boosterSel').value='';document.getElementById('durum').value='yeni';
+  document.getElementById('startRR').value='0';document.getElementById('region').value='TR';
+  document.getElementById('duo').checked=false;document.getElementById('express').checked=false;
+  document.getElementById('tarih').value=new Date().toISOString().slice(0,10);
+  fillRankSelects();onRankChange();showFormImage();toggleImageField();
+  document.getElementById('formTitle').textContent='Yeni Sipariş';
+  document.getElementById('saveBtn').textContent='Kaydet';
+  document.getElementById('cancelBtn').classList.add('hidden');
+}
+
+/* ============ GÖRSEL ============ */
+function compressImage(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=e=>{const img=new Image();
+  img.onload=()=>{const M=1280;let w=img.width,h=img.height;if(w>h&&w>M){h=Math.round(h*M/w);w=M;}else if(h>=w&&h>M){w=Math.round(w*M/h);h=M;}
+  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);res(c.toDataURL('image/jpeg',0.7));};
+  img.onerror=rej;img.src=e.target.result;};fr.onerror=rej;fr.readAsDataURL(file);});}
+async function handleImagePick(e){const f=e.target.files[0];if(!f)return;formImage=await compressImage(f);showFormImage();e.target.value='';}
+function showFormImage(){const p=document.getElementById('imgPreview'),t=document.getElementById('imgDropText'),r=document.getElementById('imgRemove');
+  if(formImage){p.src=formImage;p.classList.remove('hidden');t.classList.add('hidden');r.classList.remove('hidden');}
+  else{p.classList.add('hidden');p.removeAttribute('src');t.classList.remove('hidden');r.classList.add('hidden');}}
+function clearFormImage(){formImage=null;showFormImage();}
+document.addEventListener('paste',async e=>{const f=document.getElementById('imageField');if(!f||f.classList.contains('hidden'))return;
+  const it=[...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'));if(it){formImage=await compressImage(it.getAsFile());showFormImage();}});
+function openLightbox(id){const r=records.find(x=>x.id===id);if(!r||!r.image)return;document.getElementById('lightboxImg').src=r.image;document.getElementById('lightbox').classList.remove('hidden');}
+function closeLightbox(){document.getElementById('lightbox').classList.add('hidden');}
+
+/* ============ SİPARİŞ İŞLEMLERİ ============ */
+async function setStatus(id,durum){const {error}=await sb.from('resells').update({durum}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
+async function togglePaid(id,val){const {error}=await sb.from('resells').update({paid:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
+async function toggleArchive(id,val){const {error}=await sb.from('resells').update({archived:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
+async function addShot(id,input){const f=input.files[0];if(!f)return;input.value='';const d=await compressImage(f);
+  const {error}=await sb.from('resells').update({image:d}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
+
+/* ============ RENDER ============ */
+const STATUS_LABEL={yeni:'Yeni',atandi:'Atandı',devam:'Devam',tamam:'Tamam',odendi:'Ödendi'};
+const NEXT_STATUS={yeni:'atandi',atandi:'devam',devam:'tamam',tamam:'odendi',odendi:'yeni'};
+function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function sumByCur(rows,valFn){ return {}; }
+function curLine(m){ return '0'; }
+
+function renderStats(){
+  const el=document.getElementById('statsRow');
+  const active=records.filter(r=>!r.archived);
+  if(isAdmin()){
+    const ciro=active.reduce((s,r)=>s+saleOf(r.id),0);
+    const kar=active.reduce((s,r)=>s+saleOf(r.id)-netCostTLof(r.id)-r.payout,0);
+    const borc=active.filter(r=>!r.paid&&r.boosterId).reduce((s,r)=>s+r.payout,0);
+    const acik=active.filter(r=>!['tamam','odendi'].includes(r.durum)).length;
+    el.style.gridTemplateColumns='repeat(4,1fr)';
+    el.innerHTML=`
+      <div class="stat"><div class="label">Aktif Sipariş</div><div class="value">${active.length} <small>(${acik} açık)</small></div></div>
+      <div class="stat gold"><div class="label">Resell Cirosu</div><div class="value" style="font-size:20px">${fmt(ciro,'TRY')}</div></div>
+      <div class="stat green"><div class="label">Net Kâr</div><div class="value" style="font-size:20px">${fmt(kar,'TRY')}</div></div>
+      <div class="stat red"><div class="label">Booster Borcu</div><div class="value">${fmt(borc,'TRY')}</div></div>`;
+  } else {
+    const kazanc=active.reduce((s,r)=>s+r.payout,0);
+    const bekle=active.filter(r=>!r.paid).reduce((s,r)=>s+r.payout,0);
+    const acik=active.filter(r=>!['tamam','odendi'].includes(r.durum)).length;
+    const bitti=active.filter(r=>['tamam','odendi'].includes(r.durum)).length;
+    el.style.gridTemplateColumns='repeat(4,1fr)';
+    el.innerHTML=`
+      <div class="stat"><div class="label">Aktif İşim</div><div class="value">${acik}</div></div>
+      <div class="stat green"><div class="label">Tamamladığım</div><div class="value">${bitti}</div></div>
+      <div class="stat gold"><div class="label">Toplam Kazanç</div><div class="value">${fmt(kazanc,'TRY')}</div></div>
+      <div class="stat red"><div class="label">Bekleyen Ödeme</div><div class="value">${fmt(bekle,'TRY')}</div></div>`;
+  }
+}
+function render(){
+  renderStats();
+  const q=(document.getElementById('search').value||'').toLowerCase();
+  const fd=document.getElementById('filterDurum').value;
+  const fb=document.getElementById('filterBooster').value;
+  const fa=document.getElementById('filterArchive').value;
+  let list=records.filter(r=>{
+    if(fa==='active'&&r.archived) return false;
+    if(fa==='arch'&&!r.archived) return false;
+    if(fd&&r.durum!==fd) return false;
+    if(fb&&r.boosterId!==fb) return false;
+    if(!q) return true;
+    return [r.baslangic,r.hedef,r.platform,r.platformRef,r.not,nameOf(r.boosterId)].join(' ').toLowerCase().includes(q);
+  });
+  const el=document.getElementById('recordList');
+  if(!list.length){ el.innerHTML=`<div class="empty"><div class="big">${records.length?'Sonuç yok':'Henüz sipariş yok'}</div>
+    <div>${isAdmin()?'Soldaki formdan ekle.':'Sana iş atandığında görünecek.'}</div></div>`; return; }
+  el.innerHTML=list.map(r=>{
+    const f=F(r.id); const sale=f.sale, netTL=netCostTLof(r.id), kar=sale-netTL-r.payout;
+    const priceBlock=isAdmin()
+      ? `<div class="rec-price">${fmt(sale,'TRY')}</div><div class="rec-sub">maliyet ${fmt(netTL,'TRY')} · booster ${r.payout.toLocaleString('tr-TR')} · <span class="kar">kâr ${fmt(kar,'TRY')}</span></div>`
+      : `<div class="rec-price">${r.payout.toLocaleString('tr-TR')} ₺</div><div class="rec-sub">kazancın</div>`;
+    const shot=r.image?`<div class="rec-shot"><img src="${r.image}" onclick="openLightbox('${r.id}')"></div>`:'';
+    return `<div class="rec ${r.archived?'arch':''}">
+      <div class="rec-top"><div>
+        <div class="rec-route">${r.baslangic}<span class="arrow">→</span>${r.hedef}</div>
+        <div class="rec-meta" style="margin-top:7px">
+          ${r.archived?`<span class="chip" style="color:var(--amber)">🗄 arşiv</span>`:''}
+          ${isAdmin()&&f.platform?`<span class="chip" style="border-color:rgba(212,175,55,.3);color:var(--gold)">🛒 ${esc(f.platform)}${f.platformRef?' #'+esc(f.platformRef):''}</span>`:''}
+          ${isAdmin()&&r.boosterId?`<span class="chip booster">👤 ${esc(nameOf(r.boosterId))}</span>`:''}
+          ${isAdmin()&&!r.boosterId?`<span class="chip" style="color:var(--amber)">⚠ atanmadı</span>`:''}
+          <span class="chip">🗓 ${r.tarih}</span>
+          ${r.startRR?`<span class="chip">RR ${r.startRR}</span>`:''}
+          ${r.region!=='TR'?`<span class="chip">🌍 ${esc(r.region)}</span>`:''}
+          ${r.duo?`<span class="chip">👥 Duo</span>`:''}${r.express?`<span class="chip">⚡ Express</span>`:''}
+          ${r.payout>0?`<span class="chip ${r.paid?'paid':'unpaid'}">${r.paid?'✓ ödendi':'● ödenmedi'}</span>`:''}
+        </div>
+      </div><div style="text-align:right">${priceBlock}
+        <span class="status ${r.durum}" style="margin-top:6px;display:inline-block">${STATUS_LABEL[r.durum]}</span></div></div>
+      ${r.not?`<div class="rec-note">${esc(r.not)}</div>`:''}${shot}
+      <div class="rec-actions">
+        <button class="icon-btn go" onclick="setStatus('${r.id}','${NEXT_STATUS[r.durum]}')">→ ${STATUS_LABEL[NEXT_STATUS[r.durum]]}</button>
+        <button class="icon-btn" onclick="document.getElementById('shot-${r.id}').click()">📷 ${r.image?'Değiştir':'Görsel'}</button>
+        ${isAdmin()?`<button class="icon-btn" onclick="editRecord('${r.id}')">✎ Düzenle</button>`:''}
+        ${isAdmin()&&r.payout>0?`<button class="icon-btn" onclick="togglePaid('${r.id}',${!r.paid})">${r.paid?'↺ Ödeme geri':'💰 Ödendi'}</button>`:''}
+        ${isAdmin()?`<button class="icon-btn" onclick="toggleArchive('${r.id}',${!r.archived})">${r.archived?'↩ Arşivden çıkar':'🗄 Arşivle'}</button>`:''}
+        <input type="file" id="shot-${r.id}" accept="image/*" class="hidden" onchange="addShot('${r.id}',this)">
+      </div></div>`;
+  }).join('');
+}
+
+/* ============ RAPOR ============ */
+function clearReportDates(){document.getElementById('repFrom').value='';document.getElementById('repTo').value='';renderReport();}
+function renderReport(){
+  if(!isAdmin())return;
+  const from=document.getElementById('repFrom').value, to=document.getElementById('repTo').value;
+  const inRange=r=>(!from||r.tarih>=from)&&(!to||r.tarih<=to)&&!r.archived;
+  const rows=records.filter(inRange);
+  const ciro=rows.reduce((s,r)=>s+saleOf(r.id),0);
+  const kom=rows.reduce((s,r)=>s+komTLof(r.id),0);
+  const maliyet=rows.reduce((s,r)=>s+netCostTLof(r.id),0);
+  const boosterPay=rows.reduce((s,r)=>s+r.payout,0);
+  const odenen=rows.filter(r=>r.paid).reduce((s,r)=>s+r.payout,0);
+  const kar=ciro-maliyet-boosterPay;
+  let html=`<div class="stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:22px">
+    <div class="stat gold"><div class="label">Resell Cirosu</div><div class="value" style="font-size:19px">${fmt(ciro,'TRY')}</div></div>
+    <div class="stat blue"><div class="label">Panel Maliyeti (TL)</div><div class="value" style="font-size:19px">${fmt(maliyet,'TRY')}</div></div>
+    <div class="stat amber"><div class="label">Komisyon (TL)</div><div class="value" style="font-size:19px">${fmt(kom,'TRY')}</div></div>
+    <div class="stat"><div class="label">Booster Ödemesi</div><div class="value" style="font-size:19px">${fmt(boosterPay,'TRY')} <small>(${odenen.toLocaleString('tr-TR')} ödendi)</small></div></div>
+    <div class="stat green"><div class="label">NET KÂR</div><div class="value" style="font-size:22px">${fmt(kar,'TRY')}</div></div>
+  </div>`;
+  const byB={};
+  rows.forEach(r=>{ if(!r.boosterId)return; byB[r.boosterId]=byB[r.boosterId]||{is:0,hak:0,odendi:0}; const b=byB[r.boosterId]; b.is++; b.hak+=r.payout; if(r.paid)b.odendi+=r.payout; });
+  html+=`<h3 style="font-family:Oswald;letter-spacing:1px;text-transform:uppercase;color:var(--silver);margin-bottom:12px">Booster Başına</h3>
+    <table><thead><tr><th>Booster</th><th class="r">İş</th><th class="r">Hak Ettiği</th><th class="r">Ödenen</th><th class="r">Kalan</th></tr></thead><tbody>`;
+  const keys=Object.keys(byB);
+  if(!keys.length) html+=`<tr><td colspan="5" style="color:var(--muted)">Bu dönemde booster işi yok.</td></tr>`;
+  else keys.forEach(id=>{const b=byB[id];html+=`<tr><td>${esc(nameOf(id))}</td><td class="r">${b.is}</td>
+    <td class="r fiyat">${b.hak.toLocaleString('tr-TR')}</td><td class="r">${b.odendi.toLocaleString('tr-TR')}</td>
+    <td class="r" style="color:${b.hak-b.odendi>0?'var(--red)':'var(--green)'}">${(b.hak-b.odendi).toLocaleString('tr-TR')}</td></tr>`;});
+  html+=`</tbody></table>`;
+  document.getElementById('reportBody').innerHTML=html;
+}
+
+/* ============ BOOSTER & DAVET ============ */
+function renderInvites(){
+  const el=document.getElementById('inviteList');
+  const open=invites.filter(i=>!i.used_by);
+  if(!open.length){ el.innerHTML=''; return; }
+  el.innerHTML=`<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Kullanılmamış kodlar</div>`+
+    open.map(i=>`<span class="chip" style="margin:0 6px 6px 0;font-family:ui-monospace,monospace;color:var(--gold)">${i.code}
+      <span onclick="delInvite('${i.code}')" style="cursor:pointer;color:var(--muted)">✕</span></span>`).join('');
+}
+function renderBoosters(){
+  const el=document.getElementById('boosterList');
+  el.innerHTML=`<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Kayıtlı kişiler</div>`+
+    people.map(p=>{
+      const mine=records.filter(r=>r.boosterId===p.id&&!r.archived);
+      const borc=mine.filter(r=>!r.paid).reduce((s,r)=>s+r.payout,0);
+      const kazanc=mine.reduce((s,r)=>s+r.payout,0);
+      return `<div class="rec"><div class="rec-top"><div>
+        <div class="rec-route">${esc(p.display_name)} <span class="role-chip ${p.role==='admin'?'':'booster'}" style="margin-left:8px">${p.role==='admin'?'Admin':'Booster'}</span></div>
+        <div class="rec-meta" style="margin-top:7px">
+          <span class="chip ${p.active?'paid':'unpaid'}">${p.active?'✓ aktif':'● pasif'}</span>
+          <span class="chip">${mine.length} iş</span><span class="chip">kazanç ${kazanc.toLocaleString('tr-TR')} ₺</span>
+          ${borc>0?`<span class="chip unpaid">borç ${borc.toLocaleString('tr-TR')} ₺</span>`:''}
+        </div></div></div>
+        <div class="rec-actions">
+          <button class="icon-btn ${p.active?'del':'go'}" onclick="toggleActive('${p.id}',${!p.active})">${p.active?'Pasifleştir':'Aktifleştir'}</button>
+        </div></div>`;
+    }).join('');
+}
+function randCode(){ const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++)s+=a[Math.floor(Math.random()*a.length)]; return s; }
+async function genInvite(){
+  const code=randCode();
+  const {error}=await sb.from('invites').insert({code,created_by:me.id});
+  if(error){ alert('Kod üretilemedi: '+error.message); return; }
+  document.getElementById('newCode').textContent=code;
+  await loadAll();
+}
+function copyCode(){ const c=document.getElementById('newCode').textContent; if(c&&c!=='— — —'){ navigator.clipboard.writeText(c); } }
+async function delInvite(code){ const {error}=await sb.from('invites').delete().eq('code',code); if(error){alert(error.message);return;} await loadAll(); }
+async function toggleActive(id,val){ const {error}=await sb.from('profiles').update({active:val}).eq('id',id); if(error){alert(error.message);return;} await loadAll(); }
+
+/* ============ HESAPLAYICI ============ */
+function fillCalcSelects(){const f=document.getElementById('cFrom'),t=document.getElementById('cTo');if(!f)return;f.innerHTML='';t.innerHTML='';
+  RANK_ORDER.forEach(r=>{f.add(new Option(r,r));t.add(new Option(r,r));});f.value='Diamond 1';t.value='Ascendant 1';}
+function calcRender(){
+  const o=calcOffer(document.getElementById('cFrom').value,document.getElementById('cTo').value,{
+    startRR:document.getElementById('cRR').value,region:document.getElementById('cRegion').value,
+    duo:document.getElementById('cDuo').checked,express:document.getElementById('cExpress').checked});
+  const box=document.getElementById('offerBox');
+  if(!o){box.innerHTML=`<div class="money"><div class="row"><span>Geçersiz</span></div></div>`;return;}
+  box.innerHTML=`<div class="money" style="border-color:rgba(212,175,55,.35)">
+    <div class="row"><span>base</span><b>${o.base.toLocaleString('tr-TR')}</b></div>
+    ${o.rrDisc>0?`<div class="row"><span>RR indirimi</span><b style="color:var(--green)">−${o.rrDisc}</b></div>`:''}
+    ${o.regionMult!==1?`<div class="row"><span>bölge</span><b style="color:var(--blue)">×${o.regionMult}</b></div>`:''}
+    ${o.duo?`<div class="row"><span>duo</span><b style="color:var(--blue)">×${SETTINGS.duo_mult}</b></div>`:''}
+    ${o.express?`<div class="row"><span>express</span><b style="color:var(--blue)">×${SETTINGS.express_mult}</b></div>`:''}
+    <div class="row kar"><span>Toplam</span><b style="font-size:22px;color:var(--gold)">${o.total.toLocaleString('tr-TR')}</b></div></div>`;
+}
+
+/* ============ FİYAT LİSTESİ (düzenlenebilir) ============ */
+const RANK_SHORT={};RANK_ORDER.forEach(r=>{const p=r.split(' ');RANK_SHORT[r]=p[0][0]+p[1];});
+function renderPriceTables(){
+  const bar=`<span style="width:4px;height:16px;background:var(--gold);border-radius:2px;display:inline-block"></span>`;
+  const editable=isAdmin();
+  document.getElementById('fiyatHint').textContent=editable?'Bu liste booster ödemesidir. Değerleri değiştirip "Kaydet"e bas — herkeste güncellenir.':'Bu, işlerin karşılığında hak ettiğin tutarlardır.';
+  let head=`<th class="rk">Baş. \\ Hedef</th>`+RANK_ORDER.map(r=>`<th class="r" title="${r}">${RANK_SHORT[r]}</th>`).join('');
+  let body=RANK_ORDER.map((from,i)=>{const cells=RANK_ORDER.map((to,j)=>j>i?`<td class="r fiyat">${suggestedPrice(from,to).toLocaleString('tr-TR')}</td>`:`<td class="dim">·</td>`).join('');
+    return `<tr><th class="rk">${from}</th>${cells}</tr>`;}).join('');
+  let html=`<div class="price-block"><h3>${bar}Rank Boost Fiyat Tablosu</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px">Satır=başlangıç, sütun=hedef. B=Bronze S=Silver G=Gold P=Plat D=Diamond A=Ascendant I=Immortal.</p>
+    <div class="matrix-wrap"><table class="matrix"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+
+  // Rank değerleri (düzenlenebilir) — admin
+  if(editable){
+    html+=`<div class="price-block"><h3>${bar}Rank Değerleri <span style="color:var(--muted);font-size:12px">(matrisi besler)</span></h3>
+      <table><thead><tr><th>Rank</th><th class="r">Değer</th></tr></thead><tbody>${
+        RANK_ORDER.map(r=>`<tr><td>${r}</td><td class="r"><input class="pedit" type="number" id="rv-${RANK_SHORT[r]}" value="${RANK_VALUE[r]}"></td></tr>`).join('')
+      }</tbody></table><button class="btn btn-gold btn-sm" style="width:auto;margin-top:10px" onclick="saveRankValues()">Rank Değerlerini Kaydet</button></div>`;
+  }
+  // Net win (düzenlenebilir)
+  html+=`<div class="price-block"><h3>${bar}Net Win Boost <span style="color:var(--muted);font-size:12px">· galibiyet başına</span></h3>
+    <table><thead><tr><th>Rank</th><th class="r">Fiyat</th></tr></thead><tbody>${
+      RANK_ORDER.map(r=> editable
+        ? `<tr><td>${r}</td><td class="r"><input class="pedit" type="number" id="nw-${RANK_SHORT[r]}" value="${NET_WIN_PRICE[r]}"></td></tr>`
+        : `<tr><td>${r}</td><td class="r fiyat">${NET_WIN_PRICE[r].toLocaleString('tr-TR')}</td></tr>`).join('')
+    }</tbody></table>${editable?`<button class="btn btn-gold btn-sm" style="width:auto;margin-top:10px" onclick="saveNetWin()">Net Win Kaydet</button>`:''}</div>`;
+  // Placement (otomatik)
+  html+=`<div class="price-block"><h3>${bar}Placement <span style="color:var(--muted);font-size:12px">· net win'in yarısı</span></h3>
+    <table><thead><tr><th>Rank</th><th class="r">Fiyat</th></tr></thead><tbody>${
+      RANK_ORDER.map(r=>`<tr><td>${r}</td><td class="r fiyat">${placementPrice(r).toLocaleString('tr-TR')}</td></tr>`).join('')
+    }</tbody></table></div>`;
+  document.getElementById('priceTables').innerHTML=html;
+}
+async function saveRankValues(){
+  const nv={}; RANK_ORDER.forEach(r=>{ nv[r]=Number(document.getElementById('rv-'+RANK_SHORT[r]).value)||0; });
+  if(await savePricing('rank_values',nv)){ RANK_VALUE=nv; renderPriceTables(); onRankChange&&onRankChange(); }
+}
+async function saveNetWin(){
+  const nv={}; RANK_ORDER.forEach(r=>{ nv[r]=Number(document.getElementById('nw-'+RANK_SHORT[r]).value)||0; });
+  if(await savePricing('net_win',nv)){ NET_WIN_PRICE=nv; renderPriceTables(); }
+}
+
+/* ============ BAŞLAT ============ */
+resetForm();
+sb.auth.getSession().then(({data:{session}})=>{ if(session) afterLogin(); else showAuth(); });
+</script>
+</body>
+</html>
