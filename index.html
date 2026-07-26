@@ -241,7 +241,7 @@
       </div>
 
       <div class="three">
-        <div class="field"><label>Panel Maliyeti</label><input type="number" id="cost" placeholder="0" min="0" step="0.01" oninput="onMoneyChange()"></div>
+        <div class="field"><label>Boost Fiyatı — panelden aldığın (gelir)</label><input type="number" id="cost" placeholder="0" min="0" step="0.01" oninput="onMoneyChange()"></div>
         <div class="field"><label>Birim</label><select id="currency" onchange="onMoneyChange()">
           <option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="TRY">₺ TL</option></select></div>
       </div>
@@ -249,7 +249,6 @@
         <select id="feePct" onchange="onMoneyChange()"><option value="0">%0</option><option value="10">%10</option><option value="45">%45</option></select>
       </div>
       <div class="field" style="margin-bottom:8px" id="rateField"><label>Kur (1 birim = ? TL) — elle gir</label><input type="number" id="rate" placeholder="örn. 34" min="0" step="0.01" oninput="onMoneyChange()"></div>
-      <div class="field" style="margin-bottom:8px"><label>Resell Fiyatı (TL) — senin gelirin</label><input type="number" id="salePrice" placeholder="0" min="0" oninput="onMoneyChange()"></div>
       <div class="field" style="margin-bottom:8px"><label>Booster'a Ödenecek (TL)</label><input type="number" id="payout" placeholder="0" min="0" oninput="onMoneyChange()"></div>
       <div class="suggest" id="suggest"></div>
       <div class="money" id="moneyBox"></div>
@@ -474,14 +473,15 @@ async function loadAll(){
   finance={}; (fRes.data||[]).forEach(f=>finance[f.order_id]={
     platform:f.platform||'', platformRef:f.platform_ref||'',
     cost:Number(f.cost)||0, costCur:f.cost_currency||'USD', feePct:Number(f.fee_pct)||0,
-    costTL:Number(f.cost_tl)||0, rate:Number(f.rate)||0, sale:Number(f.sale_price)||0 });
+    costTL:Number(f.cost_tl)||0, rate:Number(f.rate)||0 });
   setSync('ok','● bağlı · canlı');
   fillBoosterSelects(); render();
   if(isAdmin()){ renderBoosters(); renderInvites(); }
 }
-const F=id=>finance[id]||{platform:'',platformRef:'',cost:0,costCur:'USD',feePct:0,costTL:0,sale:0};
-const saleOf=id=>F(id).sale;
-const netCostTLof=id=>{const f=F(id);return Math.round(f.costTL*(1-f.feePct/100));};
+const F=id=>finance[id]||{platform:'',platformRef:'',cost:0,costCur:'USD',feePct:0,costTL:0};
+/* costTL = brüt GELİR TL (boost fiyatı × kur, sipariş anında sabit) */
+const brutTLof=id=>F(id).costTL;
+const netGelirTLof=id=>{const f=F(id);return Math.round(f.costTL*(1-f.feePct/100));};
 const komTLof=id=>{const f=F(id);return Math.round(f.costTL*f.feePct/100);};
 function subscribeRealtime(){ try{ sb.channel('rt').on('postgres_changes',{event:'*',schema:'public',table:'resells'},()=>loadAll()).subscribe(); }catch(e){} }
 
@@ -551,30 +551,28 @@ function onRankChange(){
   onMoneyChange();
 }
 function onMoneyChange(){
-  const cost=Number(document.getElementById('cost').value)||0;
+  const cost=Number(document.getElementById('cost').value)||0;        // boost fiyatı = GELİR
   const cur=document.getElementById('currency').value;
   const feePct=Number(document.getElementById('feePct').value)||0;
   const rate=Number(document.getElementById('rate').value)||0;
-  const sale=Number(document.getElementById('salePrice').value)||0;   // TL gelir
   const pay=Number(document.getElementById('payout').value)||0;       // TL booster
 
   const isTL = cur==='TRY';
   document.getElementById('rateField').style.display = isTL ? 'none' : '';
 
   const feeAmt = cost*feePct/100;
-  const netCost = cost - feeAmt;
-  const netCostTL = isTL ? Math.round(netCost) : Math.round(netCost*rate);
-  const kar = sale - netCostTL - pay;
+  const netGelir = cost - feeAmt;
+  const netGelirTL = isTL ? Math.round(netGelir) : Math.round(netGelir*rate);
+  const kar = netGelirTL - pay;
 
   const rateLine = !isTL ? `<div class="row"><span>Kur (1 ${cur})</span><b style="color:var(--muted)">${rate?rate.toLocaleString('tr-TR'):'—'} ₺</b></div>` : '';
   const warn = (!isTL && !rate) ? `<div class="row"><span style="color:var(--amber)">⚠ Kuru gir</span><b></b></div>` : '';
   document.getElementById('moneyBox').innerHTML=`
-    <div class="row"><span>Panel maliyeti</span><b>${fmt(cost,cur)}</b></div>
+    <div class="row"><span>Boost fiyatı (gelir)</span><b>${fmt(cost,cur)}</b></div>
     ${feePct>0?`<div class="row"><span>Komisyon (%${feePct})</span><b style="color:var(--amber)">−${fmt(Math.round(feeAmt*100)/100,cur)}</b></div>`:''}
-    <div class="row"><span>Net (${cur})</span><b>${fmt(Math.round(netCost*100)/100,cur)}</b></div>
+    <div class="row"><span>Net gelir (${cur})</span><b>${fmt(Math.round(netGelir*100)/100,cur)}</b></div>
     ${rateLine}${warn}
-    <div class="row"><span>Net maliyet (TL)</span><b style="color:var(--blue)">${fmt(netCostTL,'TRY')}</b></div>
-    <div class="row"><span>Resell (gelir)</span><b>${fmt(sale,'TRY')}</b></div>
+    <div class="row"><span>Net gelir (TL)</span><b style="color:var(--blue)">${fmt(netGelirTL,'TRY')}</b></div>
     <div class="row"><span>Booster'a</span><b style="color:var(--blue)">−${fmt(pay,'TRY')}</b></div>
     <div class="row ${kar<0?'neg':'kar'}"><span>Sana kalan kâr</span><b>${fmt(kar,'TRY')}</b></div>`;
 }
@@ -582,14 +580,14 @@ document.addEventListener('input',e=>{ if(e.target&&e.target.id==='payout') e.ta
 function toggleImageField(){const d=document.getElementById('durum').value;document.getElementById('imageField').classList.toggle('hidden',!(d==='tamam'||d==='odendi'));}
 
 async function saveRecord(){
-  const sale=Number(document.getElementById('salePrice').value)||0;
-  if(sale<=0){ alert('Resell fiyatını (TL) gir.'); return; }
-  const cost=Number(document.getElementById('cost').value)||0;
+  const cost=Number(document.getElementById('cost').value)||0;   // boost fiyatı = GELİR
+  if(cost<=0){ alert('Boost fiyatını gir (panelden aldığın tutar).'); return; }
   const cur=document.getElementById('currency').value;
   const feePct=Number(document.getElementById('feePct').value)||0;
   const rate=Number(document.getElementById('rate').value)||0;
-  const costTL = cur==='TRY' ? Math.round(cost) : Math.round(cost*rate);   // elle girilen kurla sabitlenir
   if(cur!=='TRY' && !rate){ alert('Kuru gir (1 '+cur+' kaç TL).'); return; }
+  const costTL = cur==='TRY' ? Math.round(cost) : Math.round(cost*rate);   // brüt gelir TL, elle girilen kurla sabitlenir
+  const netGelirTL = Math.round(costTL*(1-feePct/100));
   const row={
     baslangic:document.getElementById('baslangic').value,hedef:document.getElementById('hedef').value,
     start_rr:Number(document.getElementById('startRR').value)||0,region:document.getElementById('region').value,
@@ -600,7 +598,7 @@ async function saveRecord(){
     booster_payout:Number(document.getElementById('payout').value)||0
   };
   const fin={
-    sale_price:sale, currency:'TRY',
+    sale_price:netGelirTL, currency:'TRY',   // sale_price = otomatik hesaplanan net gelir TL
     platform:document.getElementById('platform').value||null,
     platform_ref:document.getElementById('platformRef').value.trim()||null,
     cost:cost, cost_currency:cur, fee_pct:feePct, cost_tl:costTL, rate:rate
@@ -627,7 +625,6 @@ function editRecord(id){
   document.getElementById('cost').value=f.cost||'';document.getElementById('currency').value=f.costCur||'USD';
   document.getElementById('feePct').value=f.feePct||0;
   document.getElementById('rate').value=f.rate||'';
-  document.getElementById('salePrice').value=f.sale||'';
   const pe=document.getElementById('payout');pe.value=r.payout||'';pe.dataset.manual='1';
   document.getElementById('durum').value=r.durum;document.getElementById('tarih').value=r.tarih;
   document.getElementById('not').value=r.not;formImage=r.image;
@@ -639,7 +636,7 @@ function editRecord(id){
 }
 function resetForm(){
   editId=null;formImage=null;
-  ['salePrice','payout','not','cost','platformRef','rate'].forEach(i=>document.getElementById(i).value='');
+  ['payout','not','cost','platformRef','rate'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('platform').value='';document.getElementById('feePct').value='0';
   document.getElementById('currency').value='USD';document.getElementById('payout').dataset.manual='';
   document.getElementById('boosterSel').value='';document.getElementById('durum').value='yeni';
@@ -686,14 +683,14 @@ function renderStats(){
   const el=document.getElementById('statsRow');
   const active=records.filter(r=>!r.archived);
   if(isAdmin()){
-    const ciro=active.reduce((s,r)=>s+saleOf(r.id),0);
-    const kar=active.reduce((s,r)=>s+saleOf(r.id)-netCostTLof(r.id)-r.payout,0);
+    const ciro=active.reduce((s,r)=>s+brutTLof(r.id),0);
+    const kar=active.reduce((s,r)=>s+netGelirTLof(r.id)-r.payout,0);
     const borc=active.filter(r=>!r.paid&&r.boosterId).reduce((s,r)=>s+r.payout,0);
     const acik=active.filter(r=>!['tamam','odendi'].includes(r.durum)).length;
     el.style.gridTemplateColumns='repeat(4,1fr)';
     el.innerHTML=`
       <div class="stat"><div class="label">Aktif Sipariş</div><div class="value">${active.length} <small>(${acik} açık)</small></div></div>
-      <div class="stat gold"><div class="label">Resell Cirosu</div><div class="value" style="font-size:20px">${fmt(ciro,'TRY')}</div></div>
+      <div class="stat gold"><div class="label">Brüt Gelir (TL)</div><div class="value" style="font-size:20px">${fmt(ciro,'TRY')}</div></div>
       <div class="stat green"><div class="label">Net Kâr</div><div class="value" style="font-size:20px">${fmt(kar,'TRY')}</div></div>
       <div class="stat red"><div class="label">Booster Borcu</div><div class="value">${fmt(borc,'TRY')}</div></div>`;
   } else {
@@ -727,9 +724,9 @@ function render(){
   if(!list.length){ el.innerHTML=`<div class="empty"><div class="big">${records.length?'Sonuç yok':'Henüz sipariş yok'}</div>
     <div>${isAdmin()?'Soldaki formdan ekle.':'Sana iş atandığında görünecek.'}</div></div>`; return; }
   el.innerHTML=list.map(r=>{
-    const f=F(r.id); const sale=f.sale, netTL=netCostTLof(r.id), kar=sale-netTL-r.payout;
+    const f=F(r.id); const netTL=netGelirTLof(r.id), kar=netTL-r.payout;
     const priceBlock=isAdmin()
-      ? `<div class="rec-price">${fmt(sale,'TRY')}</div><div class="rec-sub">maliyet ${fmt(netTL,'TRY')} · booster ${r.payout.toLocaleString('tr-TR')} · <span class="kar">kâr ${fmt(kar,'TRY')}</span></div>`
+      ? `<div class="rec-price">${fmt(netTL,'TRY')}</div><div class="rec-sub">boost ${fmt(f.cost,f.costCur)}${f.feePct?` · kom %${f.feePct}`:''} · booster ${r.payout.toLocaleString('tr-TR')} · <span class="kar">kâr ${fmt(kar,'TRY')}</span></div>`
       : `<div class="rec-price">${r.payout.toLocaleString('tr-TR')} ₺</div><div class="rec-sub">kazancın</div>`;
     const shot=r.image?`<div class="rec-shot"><img src="${r.image}" onclick="openLightbox('${r.id}')"></div>`:'';
     return `<div class="rec ${r.archived?'arch':''}">
@@ -767,16 +764,16 @@ function renderReport(){
   const from=document.getElementById('repFrom').value, to=document.getElementById('repTo').value;
   const inRange=r=>(!from||r.tarih>=from)&&(!to||r.tarih<=to)&&!r.archived;
   const rows=records.filter(inRange);
-  const ciro=rows.reduce((s,r)=>s+saleOf(r.id),0);
+  const brut=rows.reduce((s,r)=>s+brutTLof(r.id),0);
   const kom=rows.reduce((s,r)=>s+komTLof(r.id),0);
-  const maliyet=rows.reduce((s,r)=>s+netCostTLof(r.id),0);
+  const netGelir=rows.reduce((s,r)=>s+netGelirTLof(r.id),0);
   const boosterPay=rows.reduce((s,r)=>s+r.payout,0);
   const odenen=rows.filter(r=>r.paid).reduce((s,r)=>s+r.payout,0);
-  const kar=ciro-maliyet-boosterPay;
+  const kar=netGelir-boosterPay;
   let html=`<div class="stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:22px">
-    <div class="stat gold"><div class="label">Resell Cirosu</div><div class="value" style="font-size:19px">${fmt(ciro,'TRY')}</div></div>
-    <div class="stat blue"><div class="label">Panel Maliyeti (TL)</div><div class="value" style="font-size:19px">${fmt(maliyet,'TRY')}</div></div>
-    <div class="stat amber"><div class="label">Komisyon (TL)</div><div class="value" style="font-size:19px">${fmt(kom,'TRY')}</div></div>
+    <div class="stat gold"><div class="label">Brüt Gelir (TL)</div><div class="value" style="font-size:19px">${fmt(brut,'TRY')}</div></div>
+    <div class="stat amber"><div class="label">Panel Komisyonu (TL)</div><div class="value" style="font-size:19px">−${fmt(kom,'TRY')}</div></div>
+    <div class="stat blue"><div class="label">Net Gelir (TL)</div><div class="value" style="font-size:19px">${fmt(netGelir,'TRY')}</div></div>
     <div class="stat"><div class="label">Booster Ödemesi</div><div class="value" style="font-size:19px">${fmt(boosterPay,'TRY')} <small>(${odenen.toLocaleString('tr-TR')} ödendi)</small></div></div>
     <div class="stat green"><div class="label">NET KÂR</div><div class="value" style="font-size:22px">${fmt(kar,'TRY')}</div></div>
   </div>`;
