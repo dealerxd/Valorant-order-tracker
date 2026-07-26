@@ -214,6 +214,20 @@
     <div id="offerBox"></div>
   </div>
 
+  <!-- PROFİL -->
+  <div id="tab-profil" class="panel hidden" style="max-width:520px">
+    <h2><span class="bar"></span>Profilim</h2>
+    <div class="two">
+      <div class="field"><label>Ad Soyad</label><input type="text" id="pfName" placeholder="Ad Soyad"></div>
+      <div class="field"><label>Telefon</label><input type="text" id="pfPhone" placeholder="05xx xxx xx xx"></div>
+    </div>
+    <div class="field"><label>Discord</label><input type="text" id="pfDiscord" placeholder="kullanıcı adı"></div>
+    <div class="field"><label>IBAN</label><input type="text" id="pfIban" placeholder="TR__ ____ ____ ____ ____ ____ __"></div>
+    <div class="field"><label>Crypto Adresi</label><input type="text" id="pfCrypto" placeholder="cüzdan adresi (ağı da yaz: TRC20, ERC20...)"></div>
+    <div class="auth-msg" id="pfMsg"></div>
+    <button class="btn btn-gold" onclick="saveProfile()">Kaydet</button>
+  </div>
+
   <!-- FİYAT LİSTESİ (düzenlenebilir) -->
   <div id="tab-fiyat" class="panel hidden">
     <h2><span class="bar"></span>Booster Fiyat Listesi</h2>
