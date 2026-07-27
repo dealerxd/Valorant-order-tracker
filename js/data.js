@@ -30,6 +30,7 @@ async function loadAll(){
   if(isAdmin()){ renderBoosters(); renderInvites(); renderArchive(); }
 }
 const F=id=>finance[id]||{platform:'',platformRef:'',cost:0,costCur:'USD',feePct:0,costTL:0};
+const hasFin=id=>!!finance[id];   // booster'ın kendi girdiği işlerde finans kaydı yoktur (admin sonradan doldurur)
 /* costTL = brüt GELİR TL (boost fiyatı × kur, sipariş anında sabit) */
 const brutTLof=id=>F(id).costTL;
 const netGelirTLof=id=>{const f=F(id);return Math.round(f.costTL*(1-f.feePct/100));};

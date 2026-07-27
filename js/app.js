@@ -17,8 +17,11 @@ function switchTab(t){
 }
 function applyRoleUI(){
   if(!isAdmin()){
-    document.getElementById('formPanel').classList.add('hidden');
-    document.getElementById('tab-siparis').style.gridTemplateColumns='1fr';
+    // Booster formu görür ama sade: panel/link/booster ataması ve para alanları gizli.
+    // İşini kendisi girer, ücretini fiyat listesinden alır — finansı admin sonradan doldurur.
+    document.querySelectorAll('#formPanel .admin-only').forEach(el=>el.classList.add('hidden'));
+    document.getElementById('formTitle').textContent='İş Ekle';
+    document.getElementById('payoutLabel').textContent='Ücretin (TL)';
     document.getElementById('filterBooster').classList.add('hidden');
   }
 }

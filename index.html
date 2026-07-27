@@ -67,7 +67,7 @@
             <option value="custom">Özel (Custom)</option>
           </select>
         </div>
-        <div class="field"><label>Hangi Panelden</label>
+        <div class="field admin-only"><label>Hangi Panelden</label>
           <select id="platform" onchange="onPlatformChange()">
             <option value="">— seç —</option>
             <option value="Eldorado">Eldorado ($)</option>
@@ -76,7 +76,7 @@
           </select>
         </div>
       </div>
-      <div class="two">
+      <div class="two admin-only">
         <div class="field"><label>Link</label><input type="text" id="platformRef" placeholder="sipariş linki"></div>
         <div class="field"><label>Booster</label><select id="boosterSel" onchange="onRankChange()"></select></div>
       </div>
@@ -112,20 +112,20 @@
         <div class="extra-pills" id="extrasBox"></div>
       </div>
 
-      <div class="three">
-        <div class="field"><label>Boost Fiyatı — panelden aldığın (gelir)</label><input type="number" id="cost" placeholder="0" min="0" step="0.01" oninput="onMoneyChange()"></div>
+      <div class="three admin-only">
+        <div class="field"><label>Boost Fiyatı — panelden aldığın (gelir)</label><input type="number" id="cost" placeholder="0 = finanssız kaydet" min="0" step="0.01" oninput="onMoneyChange()"></div>
         <div class="field"><label>Birim</label><select id="currency" onchange="onMoneyChange()">
           <option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="TRY">₺ TL</option></select></div>
       </div>
-      <div class="two">
+      <div class="two admin-only">
         <div class="field"><label>Komisyon %</label>
           <select id="feePct" onchange="onMoneyChange()"><option value="0">%0</option><option value="10">%10</option><option value="45">%45</option></select>
         </div>
         <div class="field" id="rateField"><label>Kur (1 birim = ? TL)</label><input type="number" id="rate" placeholder="örn. 34" min="0" step="0.01" oninput="onMoneyChange()"></div>
       </div>
-      <div class="field" style="margin-bottom:8px"><label>Booster'a Ödenecek (TL)</label><input type="number" id="payout" placeholder="0" min="0" oninput="onMoneyChange()"></div>
+      <div class="field" style="margin-bottom:8px"><label id="payoutLabel">Booster'a Ödenecek (TL)</label><input type="number" id="payout" placeholder="0" min="0" oninput="onMoneyChange()"></div>
       <div class="suggest" id="suggest"></div>
-      <div class="money" id="moneyBox"></div>
+      <div class="money admin-only" id="moneyBox"></div>
       <div class="two">
         <div class="field"><label>Durum</label><select id="durum" onchange="toggleImageField()">
           <option value="yeni">Yeni</option><option value="atandi">Atandı</option><option value="devam">Devam</option>

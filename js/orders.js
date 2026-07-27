@@ -103,12 +103,12 @@ function toggleImageField(){const d=document.getElementById('durum').value;docum
 
 async function saveRecord(){
   const type=currentType();
-  const cost=Number(document.getElementById('cost').value)||0;   // boost fiyatı = GELİR
-  if(cost<=0){ alert('Boost fiyatını gir (panelden aldığın tutar).'); return; }
+  const isAd=isAdmin();
+  const cost=Number(document.getElementById('cost').value)||0;   // boost fiyatı = GELİR (opsiyonel: 0 = finanssız kayıt)
   const cur=document.getElementById('currency').value;
   const feePct=Number(document.getElementById('feePct').value)||0;
   const rate=Number(document.getElementById('rate').value)||0;
-  if(cur!=='TRY' && !rate){ alert('Kuru gir (1 '+cur+' kaç TL).'); return; }
+  if(isAd && cost>0 && cur!=='TRY' && !rate){ alert('Kuru gir (1 '+cur+' kaç TL).'); return; }
   const costTL = cur==='TRY' ? Math.round(cost) : Math.round(cost*rate);   // brüt gelir TL, elle girilen kurla sabitlenir
   const netGelirTL = Math.round(costTL*(1-feePct/100));
 
@@ -135,6 +135,12 @@ async function saveRecord(){
     if(!row.job_desc){ alert('İş açıklamasını yaz (ne yapılacak?).'); return; }
   }
 
+  if(!isAd){
+    // Booster kendi işini kendine ekler; finansa dokunmaz (RLS zaten engeller)
+    row.booster_id=me.id;
+    if(row.booster_payout<=0){ alert('Ücretini (TL) gir.'); return; }
+  }
+
   const fin={
     sale_price:netGelirTL, currency:'TRY',   // sale_price = otomatik hesaplanan net gelir TL
     platform:document.getElementById('platform').value||null,
@@ -146,8 +152,10 @@ async function saveRecord(){
     let id=editId;
     if(editId){ const {error}=await sb.from('resells').update(row).eq('id',editId); if(error)throw error; }
     else { const {data,error}=await sb.from('resells').insert(row).select('id').single(); if(error)throw error; id=data.id; }
-    const {error:fe}=await sb.from('order_finance').upsert(Object.assign({order_id:id},fin));
-    if(fe)throw fe;
+    if(isAd){
+      if(cost>0){ const {error:fe}=await sb.from('order_finance').upsert(Object.assign({order_id:id},fin)); if(fe)throw fe; }
+      else { await sb.from('order_finance').delete().eq('order_id',id); }   // boost fiyatı 0 = finanssız kayıt
+    }
     resetForm(); await loadAll();
   }catch(e){ alert('Kaydedilemedi: '+e.message); }
   finally{ btn.disabled=false; }
@@ -193,7 +201,7 @@ function resetForm(){
   document.getElementById('extrasBox').innerHTML='';renderFormExtras();
   document.getElementById('tarih').value=new Date().toISOString().slice(0,10);
   fillRankSelects();onTypeChange();showFormImage();toggleImageField();
-  document.getElementById('formTitle').textContent='Yeni Sipariş';
+  document.getElementById('formTitle').textContent=(me&&!isAdmin())?'İş Ekle':'Yeni Sipariş';
   document.getElementById('saveBtn').textContent='Kaydet';
   document.getElementById('cancelBtn').classList.add('hidden');
 }
@@ -251,8 +259,9 @@ function renderStats(){
   const el=document.getElementById('statsRow');
   const active=records.filter(r=>!r.archived);
   if(isAdmin()){
-    const ciro=active.reduce((s,r)=>s+brutTLof(r.id),0);
-    const kar=active.reduce((s,r)=>s+netGelirTLof(r.id)-r.payout,0);
+    const finli=active.filter(r=>hasFin(r.id));
+    const ciro=finli.reduce((s,r)=>s+brutTLof(r.id),0);
+    const kar=finli.reduce((s,r)=>s+netGelirTLof(r.id)-r.payout,0);
     const borc=active.filter(r=>!r.paid&&r.boosterId).reduce((s,r)=>s+r.payout,0);
     const acik=active.filter(r=>!['tamam','odendi'].includes(r.durum)).length;
     el.style.gridTemplateColumns='repeat(4,1fr)';
@@ -294,7 +303,9 @@ function render(){
   el.innerHTML=list.map(r=>{
     const f=F(r.id); const netTL=netGelirTLof(r.id), kar=netTL-r.payout;
     const priceBlock=isAdmin()
-      ? `<div class="rec-price">${fmt(netTL,'TRY')}</div><div class="rec-sub">boost ${fmt(f.cost,f.costCur)}${f.feePct?` · kom %${f.feePct}`:''} · booster ${r.payout.toLocaleString('tr-TR')} · <span class="kar">kâr ${fmt(kar,'TRY')}</span></div>`
+      ? (hasFin(r.id)
+          ? `<div class="rec-price">${fmt(netTL,'TRY')}</div><div class="rec-sub">boost ${fmt(f.cost,f.costCur)}${f.feePct?` · kom %${f.feePct}`:''} · booster ${r.payout.toLocaleString('tr-TR')} · <span class="kar">kâr ${fmt(kar,'TRY')}</span></div>`
+          : `<div class="rec-price" style="color:var(--amber);font-size:15px">finans yok</div><div class="rec-sub">booster ${r.payout.toLocaleString('tr-TR')} · ✎ ile boost fiyatını gir</div>`)
       : `<div class="rec-price">${r.payout.toLocaleString('tr-TR')} ₺</div><div class="rec-sub">kazancın</div>`;
     const shot=r.image?`<div class="rec-shot"><img src="${r.image}" onclick="openLightbox('${r.id}')"></div>`:'';
     return `<div class="rec ${r.archived?'arch':''}">
