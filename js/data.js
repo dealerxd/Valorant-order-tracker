@@ -4,6 +4,7 @@ function rowToRec(r){
     winCount:Number(r.win_count)||0,jobDesc:r.job_desc||'',
     startRR:r.start_rr||0,region:r.region||'TR',
     extras:Array.isArray(r.extras)?r.extras:[],
+    extraWin:!!r.extra_win,
     durum:r.durum||'yeni',tarih:r.tarih||'',not:r.note||'',image:r.image||null,
     boosterId:r.booster_id||null,payout:Number(r.booster_payout)||0,paid:!!r.paid,
     archived:!!r.archived,created:r.created_at||''};

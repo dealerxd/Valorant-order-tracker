@@ -33,8 +33,10 @@ const RANK_ORDER = ["Bronze 1","Bronze 2","Bronze 3","Silver 1","Silver 2","Silv
   "Immortal 1","Immortal 2","Immortal 3"];
 const REGION_MULT = { "TR":1.00,"EU":1.00,"NA":1.05,"Diğer":1.10 };
 
+/* Akış Tamam'da biter; ödeme ayrı takip edilir (paid bayrağı, 💰 butonu — sadece admin).
+   'odendi' etiketi eski kayıtların görüntülenmesi için duruyor. */
 const STATUS_LABEL={yeni:'Yeni',atandi:'Atandı',devam:'Devam',tamam:'Tamam',odendi:'Ödendi'};
-const NEXT_STATUS={yeni:'atandi',atandi:'devam',devam:'tamam',tamam:'odendi',odendi:'yeni'};
+const NEXT_STATUS={yeni:'atandi',atandi:'devam',devam:'tamam'};
 
 /* Fiyat verisi (DB'den yüklenir) */
 let RANK_VALUE = {}, NET_WIN_PRICE = {}, SETTINGS = {price_mult:1.25,placement_factor:0.5,

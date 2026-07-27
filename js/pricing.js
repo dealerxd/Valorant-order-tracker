@@ -46,16 +46,19 @@ function renderCalcExtras(){
 function calcSelectedExtras(){ return EXTRA_DEF.filter(e=>{const c=document.getElementById('ce-'+e.key);return c&&c.checked;}).map(e=>e.key); }
 function calcRender(){
   const ex=calcSelectedExtras();
-  const o=calcOffer(document.getElementById('cFrom').value,document.getElementById('cTo').value,{
+  const cTo=document.getElementById('cTo').value;
+  const o=calcOffer(document.getElementById('cFrom').value,cTo,{
     startRR:document.getElementById('cRR').value,region:document.getElementById('cRegion').value,extras:ex});
   const box=document.getElementById('offerBox');
   if(!o){box.innerHTML=`<div class="money"><div class="row"><span>Geçersiz</span></div></div>`;return;}
+  const ew=document.getElementById('cExtraWin').checked?Math.round((NET_WIN_PRICE[cTo]||0)*extrasMult(ex)):0;
   box.innerHTML=`<div class="money" style="border-color:rgba(212,175,55,.35)">
     <div class="row"><span>base</span><b>${o.base.toLocaleString('tr-TR')}</b></div>
     ${o.rrDisc>0?`<div class="row"><span>RR indirimi</span><b style="color:var(--green)">−${o.rrDisc}</b></div>`:''}
     ${o.regionMult!==1?`<div class="row"><span>bölge</span><b style="color:var(--blue)">×${o.regionMult}</b></div>`:''}
     ${o.extras.map(k=>`<div class="row"><span>${extraLabel(k)}</span><b style="color:var(--blue)">×${extraMultOf(k).toLocaleString('tr-TR')}</b></div>`).join('')}
-    <div class="row kar"><span>Toplam</span><b style="font-size:22px;color:var(--gold)">${o.total.toLocaleString('tr-TR')}</b></div></div>`;
+    ${ew?`<div class="row"><span>Extra Win (+1 win, ${esc(cTo)})</span><b style="color:var(--blue)">+${ew.toLocaleString('tr-TR')}</b></div>`:''}
+    <div class="row kar"><span>Toplam</span><b style="font-size:22px;color:var(--gold)">${(o.total+ew).toLocaleString('tr-TR')}</b></div></div>`;
 }
 
 /* ============ FİYAT LİSTESİ SEKMESİ (düzenlenebilir) ============ */

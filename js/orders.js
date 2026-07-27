@@ -37,12 +37,14 @@ function formSelectedExtras(){ return EXTRA_DEF.filter(e=>{const c=document.getE
 function onPlatformChange(){
   const p = document.getElementById('platform').value;
   const cfg = PLATFORMS[p];
+  const fs = document.getElementById('feePct');
   if(cfg){
     document.getElementById('currency').value = cfg.cur;
     // komisyon seçeneklerini panele göre kısıtla
-    const fs = document.getElementById('feePct');
     fs.innerHTML = '<option value="0">%0</option>' + cfg.fees.map(f=>`<option value="${f}">%${f}</option>`).join('');
     fs.value = cfg.fees[0];
+  } else {
+    fs.innerHTML = '<option value="0">%0</option><option value="10">%10</option><option value="45">%45</option>';
   }
   onMoneyChange();
 }
@@ -55,9 +57,16 @@ function onRankChange(){
   const ex=formSelectedExtras();
   let total=null, label='';
   if(t==='rank'){
-    const o=calcOffer(document.getElementById('baslangic').value,document.getElementById('hedef').value,{
+    const hedef=document.getElementById('hedef').value;
+    const o=calcOffer(document.getElementById('baslangic').value,hedef,{
       startRR:document.getElementById('startRR').value,region:document.getElementById('region').value,extras:ex});
-    if(o){ total=o.total; label='Fiyat listesine göre booster ücreti'; }
+    if(o){
+      total=o.total; label='Fiyat listesine göre booster ücreti';
+      if(document.getElementById('extraWin').checked){
+        const ew=Math.round((NET_WIN_PRICE[hedef]||0)*extrasMult(ex));   // extra win = hedef rankta 1 net win
+        total+=ew; label+=` (+${ew.toLocaleString('tr-TR')} extra win)`;
+      }
+    }
   } else if(t==='netwin'||t==='placement'){
     const rank=document.getElementById('unitRank').value;
     const n=Math.max(1,Number(document.getElementById('unitCount').value)||1);
@@ -116,6 +125,7 @@ async function saveRecord(){
     order_type:type,
     baslangic:null, hedef:null, start_rr:0, region:'TR',
     extras:type==='custom'?[]:formSelectedExtras(),
+    extra_win:type==='rank'&&document.getElementById('extraWin').checked,
     win_count:null, job_desc:null,
     durum:document.getElementById('durum').value,tarih:document.getElementById('tarih').value||new Date().toISOString().slice(0,10),
     note:document.getElementById('not').value.trim(),image:formImage||null,
@@ -175,13 +185,16 @@ function editRecord(id){
   }
   renderFormExtras();
   EXTRA_DEF.forEach(e=>{const c=document.getElementById('fx-'+e.key);if(c)c.checked=(r.extras||[]).includes(e.key);});
+  document.getElementById('extraWin').checked=r.orderType==='rank'&&!!r.extraWin;
   document.getElementById('platform').value=f.platform||''; onPlatformChange();
   document.getElementById('platformRef').value=f.platformRef||'';
   document.getElementById('cost').value=f.cost||'';document.getElementById('currency').value=f.costCur||'USD';
   document.getElementById('feePct').value=f.feePct||0;
   document.getElementById('rate').value=f.rate||'';
   const pe=document.getElementById('payout');pe.value=r.payout||'';pe.dataset.manual='1';
-  document.getElementById('durum').value=r.durum;document.getElementById('tarih').value=r.tarih;
+  const ds=document.getElementById('durum');ds.value=r.durum;
+  if(ds.value!==r.durum) ds.value='tamam';   // eski 'odendi' durumu artık seçenek değil → Tamam'a düşür
+  document.getElementById('tarih').value=r.tarih;
   document.getElementById('not').value=r.not;formImage=r.image;
   toggleImageField();showFormImage();onTypeChange();
   document.getElementById('formTitle').textContent='Siparişi Düzenle';
@@ -196,8 +209,10 @@ function resetForm(){
   document.getElementById('unitCount').value='1';
   document.getElementById('platform').value='';document.getElementById('feePct').value='0';
   document.getElementById('currency').value='USD';document.getElementById('payout').dataset.manual='';
-  document.getElementById('boosterSel').value='';document.getElementById('durum').value='yeni';
+  document.getElementById('boosterSel').value='';
+  document.getElementById('durum').value=(me&&!isAdmin())?'atandi':'yeni';   // booster'ın girdiği iş zaten ona atanmış
   document.getElementById('startRR').value='0';document.getElementById('region').value='TR';
+  document.getElementById('extraWin').checked=false;
   document.getElementById('extrasBox').innerHTML='';renderFormExtras();
   document.getElementById('tarih').value=new Date().toISOString().slice(0,10);
   fillRankSelects();onTypeChange();showFormImage();toggleImageField();
@@ -226,9 +241,10 @@ async function setStatus(id,durum){const {error}=await sb.from('resells').update
 async function togglePaid(id,val){const {error}=await sb.from('resells').update({paid:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
 async function toggleArchive(id,val){const {error}=await sb.from('resells').update({archived:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
 async function deleteRecord(id){
-  if(!confirm('Bu sipariş KALICI olarak silinecek (finans kaydıyla birlikte). Geri alınamaz. Emin misin?')) return;
-  const {error}=await sb.from('resells').delete().eq('id',id);
+  if(!confirm('Bu iş KALICI olarak silinecek. Geri alınamaz. Emin misin?')) return;
+  const {data,error}=await sb.from('resells').delete().eq('id',id).select('id');
   if(error){alert('Silinemedi: '+error.message);return;}
+  if(!data||!data.length){alert('Silinemedi: bu iş ödenmiş ya da yönetici finans bilgisi girmiş. Silinmesi gerekiyorsa yöneticiye söyle.');return;}
   if(editId===id) resetForm();
   await loadAll();
 }
@@ -298,8 +314,8 @@ function render(){
     return [r.baslangic,r.hedef,r.jobDesc,ORDER_TYPES[r.orderType],r.not,nameOf(r.boosterId)].join(' ').toLowerCase().includes(q);
   });
   const el=document.getElementById('recordList');
-  if(!list.length){ el.innerHTML=`<div class="empty"><div class="big">${records.length?'Sonuç yok':'Henüz sipariş yok'}</div>
-    <div>${isAdmin()?'Soldaki formdan ekle.':'Sana iş atandığında görünecek.'}</div></div>`; return; }
+  if(!list.length){ el.innerHTML=`<div class="empty"><div class="big">${records.length?'Sonuç yok':'Henüz iş yok'}</div>
+    <div>${isAdmin()?'Soldaki formdan ekle.':'Soldaki formdan işini kendin ekleyebilirsin.'}</div></div>`; return; }
   el.innerHTML=list.map(r=>{
     const f=F(r.id); const netTL=netGelirTLof(r.id), kar=netTL-r.payout;
     const priceBlock=isAdmin()
@@ -320,6 +336,7 @@ function render(){
           <span class="chip">🗓 ${r.tarih}</span>
           ${r.orderType==='rank'&&r.startRR?`<span class="chip">RR ${r.startRR}</span>`:''}
           ${r.orderType==='rank'&&r.region!=='TR'?`<span class="chip">🌍 ${esc(r.region)}</span>`:''}
+          ${r.orderType==='rank'&&r.extraWin?`<span class="chip">➕ Extra Win</span>`:''}
           ${(r.extras||[]).map(k=>`<span class="chip">✚ ${esc(extraLabel(k))}</span>`).join('')}
           ${r.payout>0?`<span class="chip ${r.paid?'paid':'unpaid'}">${r.paid?'✓ ödendi':'● ödenmedi'}</span>`:''}
         </div>
@@ -328,12 +345,12 @@ function render(){
       ${r.jobDesc?`<div class="rec-note">📋 ${esc(r.jobDesc)}</div>`:''}
       ${r.not?`<div class="rec-note">${esc(r.not)}</div>`:''}${shot}
       <div class="rec-actions">
-        <button class="icon-btn go" onclick="setStatus('${r.id}','${NEXT_STATUS[r.durum]}')">→ ${STATUS_LABEL[NEXT_STATUS[r.durum]]}</button>
+        ${NEXT_STATUS[r.durum]?`<button class="icon-btn go" onclick="setStatus('${r.id}','${NEXT_STATUS[r.durum]}')">→ ${STATUS_LABEL[NEXT_STATUS[r.durum]]}</button>`:''}
         <button class="icon-btn" onclick="document.getElementById('shot-${r.id}').click()">📷 ${r.image?'Değiştir':'Görsel'}</button>
-        ${isAdmin()?`<button class="icon-btn" onclick="editRecord('${r.id}')">✎ Düzenle</button>`:''}
+        <button class="icon-btn" onclick="editRecord('${r.id}')">✎ Düzenle</button>
         ${isAdmin()&&r.payout>0?`<button class="icon-btn" onclick="togglePaid('${r.id}',${!r.paid})">${r.paid?'↺ Ödeme geri':'💰 Ödendi'}</button>`:''}
         ${isAdmin()?`<button class="icon-btn" onclick="toggleArchive('${r.id}',${!r.archived})">${r.archived?'↩ Arşivden çıkar':'🗄 Arşivle'}</button>`:''}
-        ${isAdmin()?`<button class="icon-btn del" onclick="deleteRecord('${r.id}')">🗑 Sil</button>`:''}
+        ${(isAdmin()||!r.paid)?`<button class="icon-btn del" onclick="deleteRecord('${r.id}')">🗑 Sil</button>`:''}
         <input type="file" id="shot-${r.id}" accept="image/*" class="hidden" onchange="addShot('${r.id}',this)">
       </div></div>`;
   }).join('');
