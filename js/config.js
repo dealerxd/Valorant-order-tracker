@@ -38,8 +38,10 @@ const REGION_MULT = { "TR":1.00,"EU":1.00,"NA":1.05,"Diğer":1.10 };
 const STATUS_LABEL={yeni:'Yeni',atandi:'Atandı',devam:'Devam',tamam:'Tamam',odendi:'Ödendi'};
 const NEXT_STATUS={yeni:'atandi',atandi:'devam',devam:'tamam'};
 
-/* Fiyat verisi (DB'den yüklenir) */
-let RANK_VALUE = {}, NET_WIN_PRICE = {}, SETTINGS = {price_mult:1.25,placement_factor:0.5,
+/* Fiyat verisi (DB'den yüklenir)
+   STEP_PRICE[r] = r rankından bir sonrakine çıkmanın TL fiyatı (bölüm başı).
+   Boost fiyatı = başlangıç→hedef arasındaki adımların toplamı. */
+let STEP_PRICE = {}, RANK_VALUE = {}, NET_WIN_PRICE = {}, SETTINGS = {price_mult:1.25,placement_factor:0.5,
   extras:{duo:2.0,stream:1.0,offline:1.0,agent:1.0,no5q:1.0,soloq:1.0}};
 
 /* Uygulama durumu */

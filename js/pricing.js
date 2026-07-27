@@ -5,9 +5,9 @@ function calcOffer(from,to,opts){
   opts=opts||{};
   const fi=RANK_ORDER.indexOf(from), ti=RANK_ORDER.indexOf(to);
   if(fi<0||ti<0||ti<=fi) return null;
-  const base=Math.round((RANK_VALUE[to]-RANK_VALUE[from])*SETTINGS.price_mult);
+  let base=0; for(let i=fi;i<ti;i++) base+=Number(STEP_PRICE[RANK_ORDER[i]])||0;   // bölüm fiyatları toplamı
   const startRR=Math.max(0,Math.min(99,Number(opts.startRR)||0));
-  const firstDiv=(RANK_VALUE[RANK_ORDER[fi+1]]-RANK_VALUE[from])*SETTINGS.price_mult;
+  const firstDiv=Number(STEP_PRICE[from])||0;
   const rrDisc=Math.round(firstDiv*(startRR/100));
   let total=base-rrDisc;
   const rm=REGION_MULT[opts.region||'TR']!=null?REGION_MULT[opts.region||'TR']:1;
@@ -22,11 +22,18 @@ async function loadPricing(){
   const { data }=await sb.from('pricing').select('*');
   const defExtras=Object.assign({},SETTINGS.extras);
   (data||[]).forEach(p=>{
+    if(p.id==='step_prices') STEP_PRICE=p.data;
     if(p.id==='rank_values') RANK_VALUE=p.data;
     if(p.id==='net_win') NET_WIN_PRICE=p.data;
     if(p.id==='settings') SETTINGS=Object.assign(SETTINGS,p.data);
   });
   SETTINGS.extras=Object.assign(defExtras,SETTINGS.extras||{});
+  // geriye dönük: step_prices yoksa eski rank_values × çarpandan türet
+  if(!Object.keys(STEP_PRICE).length && Object.keys(RANK_VALUE).length){
+    for(let i=0;i<RANK_ORDER.length-1;i++){
+      STEP_PRICE[RANK_ORDER[i]]=Math.round((RANK_VALUE[RANK_ORDER[i+1]]-RANK_VALUE[RANK_ORDER[i]])*SETTINGS.price_mult);
+    }
+  }
   fillRankSelects(); fillCalcSelects(); renderFormExtras(); renderCalcExtras();
 }
 async function savePricing(id,data){
@@ -74,12 +81,13 @@ function renderPriceTables(){
     <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px">Satır=başlangıç, sütun=hedef. B=Bronze S=Silver G=Gold P=Plat D=Diamond A=Ascendant I=Immortal.</p>
     <div class="matrix-wrap"><table class="matrix"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
 
-  // Rank değerleri (düzenlenebilir) — admin
+  // Bölüm fiyatları (düzenlenebilir) — admin. "Bu ranktan bir sonrakine çıkmak kaç TL?"
   if(editable){
-    html+=`<div class="price-block"><h3>${bar}Rank Değerleri <span style="color:var(--muted);font-size:12px">(matrisi besler)</span></h3>
-      <table><thead><tr><th>Rank</th><th class="r">Değer</th></tr></thead><tbody>${
-        RANK_ORDER.map(r=>`<tr><td>${r}</td><td class="r"><input class="pedit" type="number" id="rv-${RANK_SHORT[r]}" value="${RANK_VALUE[r]}"></td></tr>`).join('')
-      }</tbody></table><button class="btn btn-gold btn-sm" style="width:auto;margin-top:10px" onclick="saveRankValues()">Rank Değerlerini Kaydet</button></div>`;
+    html+=`<div class="price-block"><h3>${bar}Bölüm Fiyatları <span style="color:var(--muted);font-size:12px">· bir sonraki ranka çıkma ücreti — matrisi bu besler</span></h3>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px">Örn. Plat 1 satırına 100 yazarsan Plat 1 → Plat 2 = 100 ₺ olur. Toplam boost fiyatı = aradaki bölümlerin toplamı.</p>
+      <table><thead><tr><th>Bölüm</th><th class="r">Fiyat (₺)</th></tr></thead><tbody>${
+        RANK_ORDER.slice(0,-1).map((r,i)=>`<tr><td>${r} <span style="color:var(--gold)">→</span> ${RANK_ORDER[i+1]}</td><td class="r"><input class="pedit" type="number" id="sp-${RANK_SHORT[r]}" value="${Number(STEP_PRICE[r])||0}"></td></tr>`).join('')
+      }</tbody></table><button class="btn btn-gold btn-sm" style="width:auto;margin-top:10px" onclick="saveStepPrices()">Bölüm Fiyatlarını Kaydet</button></div>`;
   }
   // Net win (düzenlenebilir)
   html+=`<div class="price-block"><h3>${bar}Net Win Boost <span style="color:var(--muted);font-size:12px">· galibiyet başına</span></h3>
@@ -107,9 +115,9 @@ async function saveExtras(){
   const merged=Object.assign({},SETTINGS,{extras:ex});
   if(await savePricing('settings',merged)){ SETTINGS=merged; renderPriceTables(); renderFormExtras(); renderCalcExtras(); onRankChange&&onRankChange(); }
 }
-async function saveRankValues(){
-  const nv={}; RANK_ORDER.forEach(r=>{ nv[r]=Number(document.getElementById('rv-'+RANK_SHORT[r]).value)||0; });
-  if(await savePricing('rank_values',nv)){ RANK_VALUE=nv; renderPriceTables(); onRankChange&&onRankChange(); }
+async function saveStepPrices(){
+  const nv={}; RANK_ORDER.slice(0,-1).forEach(r=>{ nv[r]=Number(document.getElementById('sp-'+RANK_SHORT[r]).value)||0; });
+  if(await savePricing('step_prices',nv)){ STEP_PRICE=nv; renderPriceTables(); onRankChange&&onRankChange(); }
 }
 async function saveNetWin(){
   const nv={}; RANK_ORDER.forEach(r=>{ nv[r]=Number(document.getElementById('nw-'+RANK_SHORT[r]).value)||0; });
