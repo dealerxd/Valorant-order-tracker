@@ -2,7 +2,7 @@
 function rowToRec(r){
   return {id:r.id,orderType:r.order_type||'rank',baslangic:r.baslangic||'',hedef:r.hedef||'',
     winCount:Number(r.win_count)||0,jobDesc:r.job_desc||'',
-    startRR:r.start_rr||0,region:r.region||'TR',
+    startRR:r.start_rr||0,region:r.region||'TR',riotId:r.riot_id||'',
     extras:Array.isArray(r.extras)?r.extras:[],
     extraWin:!!r.extra_win,
     durum:r.durum||'yeni',tarih:r.tarih||'',not:r.note||'',image:r.image||null,

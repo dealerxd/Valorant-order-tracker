@@ -123,7 +123,7 @@ async function saveRecord(){
 
   const row={
     order_type:type,
-    baslangic:null, hedef:null, start_rr:0, region:'TR',
+    baslangic:null, hedef:null, start_rr:0, region:'TR', riot_id:null,
     extras:type==='custom'?[]:formSelectedExtras(),
     extra_win:type==='rank'&&document.getElementById('extraWin').checked,
     win_count:null, job_desc:null,
@@ -137,6 +137,9 @@ async function saveRecord(){
     row.hedef=document.getElementById('hedef').value;
     row.start_rr=Number(document.getElementById('startRR').value)||0;
     row.region=document.getElementById('region').value;
+    const rid=document.getElementById('riotId').value.trim();
+    if(rid && !/^[^#]+#[^#]+$/.test(rid)){ alert('Riot ID "isim#tag" formatında olmalı. Örnek: Player#TR1'); return; }
+    row.riot_id=rid||null;
   } else if(type==='netwin'||type==='placement'){
     row.baslangic=document.getElementById('unitRank').value;
     row.win_count=Math.max(1,Number(document.getElementById('unitCount').value)||1);
@@ -182,6 +185,7 @@ function editRecord(id){
   } else {
     document.getElementById('baslangic').value=r.baslangic;document.getElementById('hedef').value=r.hedef;
     document.getElementById('startRR').value=r.startRR;document.getElementById('region').value=r.region;
+    document.getElementById('riotId').value=r.riotId||'';
   }
   renderFormExtras();
   EXTRA_DEF.forEach(e=>{const c=document.getElementById('fx-'+e.key);if(c)c.checked=(r.extras||[]).includes(e.key);});
@@ -204,7 +208,7 @@ function editRecord(id){
 }
 function resetForm(){
   editId=null;formImage=null;
-  ['payout','not','cost','platformRef','rate','jobDesc'].forEach(i=>document.getElementById(i).value='');
+  ['payout','not','cost','platformRef','rate','jobDesc','riotId'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('orderType').value='rank';
   document.getElementById('unitCount').value='1';
   document.getElementById('platform').value='';document.getElementById('feePct').value='0';
@@ -311,7 +315,7 @@ function render(){
     if(fd&&r.durum!==fd) return false;
     if(fb&&r.boosterId!==fb) return false;
     if(!q) return true;
-    return [r.baslangic,r.hedef,r.jobDesc,ORDER_TYPES[r.orderType],r.not,nameOf(r.boosterId)].join(' ').toLowerCase().includes(q);
+    return [r.baslangic,r.hedef,r.jobDesc,ORDER_TYPES[r.orderType],r.not,r.riotId,nameOf(r.boosterId)].join(' ').toLowerCase().includes(q);
   });
   const el=document.getElementById('recordList');
   if(!list.length){ el.innerHTML=`<div class="empty"><div class="big">${records.length?'Sonuç yok':'Henüz iş yok'}</div>
@@ -336,6 +340,7 @@ function render(){
           <span class="chip">🗓 ${r.tarih}</span>
           ${r.orderType==='rank'&&r.startRR?`<span class="chip">RR ${r.startRR}</span>`:''}
           ${r.orderType==='rank'&&r.region!=='TR'?`<span class="chip">🌍 ${esc(r.region)}</span>`:''}
+          ${r.riotId?`<span class="chip" style="border-color:rgba(90,157,237,.35);color:var(--blue)">🎮 ${esc(r.riotId)}</span>`:''}
           ${r.orderType==='rank'&&r.extraWin?`<span class="chip">➕ Extra Win</span>`:''}
           ${(r.extras||[]).map(k=>`<span class="chip">✚ ${esc(extraLabel(k))}</span>`).join('')}
           ${r.payout>0?`<span class="chip ${r.paid?'paid':'unpaid'}">${r.paid?'✓ ödendi':'● ödenmedi'}</span>`:''}
