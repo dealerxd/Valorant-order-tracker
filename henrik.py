@@ -34,6 +34,17 @@ class AccountNotFound(HenrikError):
     pass
 
 
+class InvalidApiKey(HenrikError):
+    """401 - anahtar yanlis, eksik ya da iptal edilmis."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "HenrikDev API anahtari gecersiz (401 Unauthorized).\n"
+            "HENRIK_API_KEY degerini kontrol et: basinda/sonunda tirnak, bosluk ya da "
+            "satir sonu olmamali, 'HDEV-' ile baslamali."
+        )
+
+
 class RateLimited(HenrikError):
     def __init__(self, retry_after: float):
         super().__init__(f"Rate limit asildi, {retry_after:.0f} sn sonra tekrar denenecek")
@@ -160,6 +171,9 @@ class HenrikClient:
                 await asyncio.sleep(min(retry_after, 60))
                 continue
 
+            if resp.status_code == 401:
+                raise InvalidApiKey()
+
             if resp.status_code == 404:
                 raise AccountNotFound(f"Bulunamadi: {path}")
 
@@ -186,6 +200,24 @@ class HenrikClient:
             return payload["data"]
 
         raise HenrikError(f"Istek basarisiz: {path}")
+
+    async def validate_key(self) -> int:
+        """Anahtari acilista dogrular ve dakikalik istek limitini doner.
+
+        Kisisel veri iceren bir endpoint'e vurmaz; sunucu durumu sorgulanir.
+        Anahtar bozuksa InvalidApiKey firlatir, boylece bot sessizce acilip
+        5 dakika sonra 'baglanamadi' hatasi uretmez.
+        """
+        await self._limiter.acquire()
+        resp = await self._client.get("/valorant/v1/status/eu")
+        if resp.status_code == 401:
+            raise InvalidApiKey()
+        if resp.status_code != 200:
+            raise HenrikError(f"HenrikDev dogrulanamadi: HTTP {resp.status_code}")
+        try:
+            return int(resp.headers.get("x-ratelimit-limit", "0"))
+        except ValueError:
+            return 0
 
     # --- Endpoint sarmalayicilari --------------------------------------------
 

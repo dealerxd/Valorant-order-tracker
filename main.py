@@ -49,6 +49,16 @@ async def run() -> None:
             "SUPABASE_URL ve SUPABASE_SERVICE_KEY degerlerini kontrol et."
         ) from exc
 
+    # Anahtar bozuksa burada patlasin; yoksa hata ancak ilk baglama denemesinde
+    # 'hesap sorgulanamadi' seklinde ortaya cikiyor ve teshisi zorlasiyor.
+    try:
+        limit = await client.validate_key()
+        log.info("HenrikDev anahtari gecerli (limit: %d istek/dk)", limit)
+    except henrik.HenrikError as exc:
+        await store.aclose()
+        await client.aclose()
+        raise RuntimeError(str(exc)) from exc
+
     telegram_bot = None
     discord_bot = None
     webhook = None
