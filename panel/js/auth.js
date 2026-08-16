@@ -42,8 +42,8 @@ async function afterLogin(){
   me=data;
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  document.getElementById('whoAmI').innerHTML=`${esc(me.display_name)} <span class="role-chip ${isAdmin()?'':'booster'}">${isAdmin()?'Admin':'Booster'}</span>`;
-  buildTabs(); applyRoleUI();
+  renderMeCard();
+  buildTabs(); applyRoleUI(); switchTab(currentTab);
   await loadPricing(); await loadAll(); subscribeRealtime();
   onMoneyChange();
 }

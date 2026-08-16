@@ -207,6 +207,7 @@ async function saveRecord(){
 }
 function editRecord(id){
   const r=records.find(x=>x.id===id); if(!r)return; editId=id; const f=F(id);
+  switchTab('siparis'); showForm();
   document.getElementById('gameSel').value=r.game||DEFAULT_GAME;
   onGameChange();                       // rank listelerini bu oyuna gore doldur
   document.getElementById('orderType').value=r.orderType||'rank';
@@ -240,7 +241,15 @@ function editRecord(id){
   document.getElementById('cancelBtn').classList.remove('hidden');
   window.scrollTo({top:0,behavior:'smooth'});
 }
+/* Tablo/pano modunda .wide form sütununu gizliyor. Forma dönen her yol
+   (yeni sipariş butonu, düzenle, uyarıdan gelen bağlantı) buradan geçtiği
+   için görünürlüğü tek yerde geri alıyoruz. */
+function showForm(){
+  document.getElementById('tab-siparis')?.classList.remove('wide');
+}
+
 function resetForm(){
+  showForm();
   editId=null;formImage=null;
   ['payout','not','cost','platformRef','rate','jobDesc','riotId'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('orderType').value='rank';
@@ -338,26 +347,166 @@ function renderStats(){
       <div class="stat red"><div class="label">Bekleyen Ödeme</div><div class="value">${fmt(bekle,'TRY')}</div></div>`;
   }
 }
-function render(){
-  renderStats();
-  const q=(document.getElementById('search').value||'').toLowerCase();
-  const fg=(document.getElementById('filterGame')||{}).value||'';
-  const fd=document.getElementById('filterDurum').value;
-  const fb=document.getElementById('filterBooster').value;
-  const fa=document.getElementById('filterArchive').value;
-  let list=records.filter(r=>{
-    if(fa==='active'&&r.archived) return false;
-    if(fa==='arch'&&!r.archived) return false;
-    if(fg&&r.game!==fg) return false;
-    if(fd&&r.durum!==fd) return false;
-    if(fb&&r.boosterId!==fb) return false;
+/* ============ SİPARİŞ GÖRÜNÜMLERİ ============
+
+   Üç görünüm aynı filtrelenmiş listeyi tüketiyor: kart (eskisi), tablo, pano.
+   Filtre durumu DOM'da değil burada: realtime her sipariş değişiminde
+   loadAll->render tetikliyor ve innerHTML baştan yazılıyor — DOM'da tutulan
+   seçim ya da sekme durumu her turda kaybolurdu.
+
+   Durum filtresi eskiden #filterDurum select'iydi; artık durum sekmeleri.
+   Tek kaynak ordersView.durum. */
+
+const ordersView = {
+  mode:  lsGet('ordersMode', 'kart'),   // kart | tablo | pano
+  durum: '',                            // '' = hepsi
+  sel:   new Set(),                     // toplu seçim, sipariş id'leri
+};
+
+function setOrdersView(mode){
+  ordersView.mode = mode; lsSet('ordersMode', mode);
+  ordersView.sel.clear();
+  render();
+}
+function setOrdersDurum(d){ ordersView.durum = d; ordersView.sel.clear(); render(); }
+
+/* Genel Bakış ve bildirimler buradan süzüyor — kendi filtre mantığını
+   kurmuyorlar, aksi hâlde aynı ekranda farklı sayılar çıkardı. */
+function setOrdersFilter(f){
+  switchTab('siparis');
+  if('durum'   in f) ordersView.durum = f.durum;
+  if('game'    in f) document.getElementById('filterGame').value = f.game;
+  if('booster' in f) document.getElementById('filterBooster').value = f.booster;
+  if('archive' in f) document.getElementById('filterArchive').value = f.archive;
+  if('q'       in f) document.getElementById('search').value = f.q;
+  ordersView.sel.clear();
+  render();
+}
+
+function filterRecords(){
+  const q  = (document.getElementById('search').value || '').toLowerCase();
+  const fg = (document.getElementById('filterGame') || {}).value || '';
+  const fb = document.getElementById('filterBooster').value;
+  const fa = document.getElementById('filterArchive').value;
+  return records.filter(r => {
+    if(fa === 'active' && r.archived) return false;
+    if(fa === 'arch' && !r.archived) return false;
+    if(fg && r.game !== fg) return false;
+    if(ordersView.durum && r.durum !== ordersView.durum) return false;
+    if(fb && r.boosterId !== fb) return false;
     if(!q) return true;
-    return [r.baslangic,r.hedef,r.jobDesc,ORDER_TYPES[r.orderType],gameOf(r.game).label,r.not,r.riotId,nameOf(r.boosterId)].join(' ').toLowerCase().includes(q);
+    return [r.baslangic, r.hedef, r.jobDesc, ORDER_TYPES[r.orderType], gameOf(r.game).label,
+            r.not, r.riotId, nameOf(r.boosterId)].join(' ').toLowerCase().includes(q);
   });
-  const el=document.getElementById('recordList');
-  if(!list.length){ el.innerHTML=`<div class="empty"><div class="big">${records.length?'Sonuç yok':'Henüz iş yok'}</div>
-    <div>${isAdmin()?'Soldaki formdan ekle.':'Soldaki formdan işini kendin ekleyebilirsin.'}</div></div>`; return; }
-  el.innerHTML=list.map(r=>{
+}
+
+/* Durum sekmesi sayaçları durum filtresini YOK SAYAR, diğer filtreleri sayar —
+   yoksa seçili sekmenin dışındaki her sekme 0 gösterirdi. */
+function statusCounts(){
+  const tut = ordersView.durum; ordersView.durum = '';
+  const hepsi = filterRecords(); ordersView.durum = tut;
+  const c = { '': hepsi.length };
+  FORM_STATUSES.forEach(k => c[k] = hepsi.filter(r => r.durum === k).length);
+  return c;
+}
+
+function renderStatusTabs(){
+  const box = document.getElementById('statusTabs'); if(!box) return;
+  const c = statusCounts();
+  const tabs = [['', 'Tümü']].concat(FORM_STATUSES.map(k => [k, STATUS_LABEL[k]]));
+  box.innerHTML = tabs.map(([k, l]) =>
+    `<button class="st-tab${k===ordersView.durum?' active':''}" onclick="setOrdersDurum('${k}')">
+       ${esc(l)}<span class="st-n">${c[k] || 0}</span></button>`).join('');
+}
+
+function renderViewSwitch(){
+  const box = document.getElementById('viewSwitch'); if(!box) return;
+  const modlar = [['kart','▤','Kart'], ['tablo','☰','Tablo'], ['pano','▥','Pano']];
+  box.innerHTML = modlar.map(([m, i, t]) =>
+    `<button class="vw${m===ordersView.mode?' active':''}" onclick="setOrdersView('${m}')" title="${t}">${i}</button>`).join('');
+}
+
+/* --- Toplu seçim ----------------------------------------------------------
+   Görünmeyen kayıtta değişiklik yapmak bu sistemdeki en tehlikeli hata sınıfı;
+   her render'da seçim görünür listeye kırpılıyor. Toplu SİLME bilinçli olarak
+   yok — geri dönüşü olmayan tek işlem tek tek yapılsın. */
+function pruneSelection(list){
+  const gorunen = new Set(list.map(r => r.id));
+  [...ordersView.sel].forEach(id => { if(!gorunen.has(id)) ordersView.sel.delete(id); });
+}
+function toggleSel(id, on){
+  if(on) ordersView.sel.add(id); else ordersView.sel.delete(id);
+  renderBulkBar();
+  document.querySelectorAll(`[data-selrow="${id}"]`).forEach(el => el.classList.toggle('picked', on));
+}
+function selAll(on){
+  const list = filterRecords();
+  ordersView.sel.clear();
+  if(on) list.forEach(r => ordersView.sel.add(r.id));
+  render();
+}
+function renderBulkBar(){
+  const bar = document.getElementById('bulkBar'); if(!bar) return;
+  const n = ordersView.sel.size;
+  bar.classList.toggle('hidden', n === 0);
+  if(!n) return;
+  bar.innerHTML = `<span class="bulk-n">${n} seçili</span>
+    <button class="icon-btn go" onclick="bulkAdvance()">→ Durumu ilerlet</button>
+    ${isAdmin() ? `<button class="icon-btn" onclick="bulkArchive(true)">🗄 Arşivle</button>
+                   <button class="icon-btn" onclick="bulkPaid(true)">💰 Ödendi</button>` : ''}
+    <button class="icon-btn" onclick="selAll(false)">Seçimi bırak</button>`;
+}
+
+/* Toplu yazmalar .select('id') ile yapılıyor: RLS bir satırı sessizce
+   reddedebiliyor (deleteRecord'da bunun canlı örneği var). Dönen satır sayısı
+   beklenenden azsa kullanıcıya söylüyoruz. */
+async function bulkPatch(ids, patch, etiket){
+  if(!ids.length) return;
+  const { data, error } = await sb.from(TABLES.orders).update(patch).in('id', ids).select('id');
+  if(error){ alert(etiket + ' başarısız: ' + error.message); return; }
+  const yazilan = (data || []).length;
+  if(yazilan < ids.length)
+    alert(`${etiket}: ${ids.length} seçiliydi, ${yazilan} tanesi güncellendi. ` +
+          `Kalanına yetkin olmayabilir.`);
+  ordersView.sel.clear();
+  await loadAll();
+}
+function bulkAdvance(){
+  // Her seçilinin bir sonraki durumu farklı olabilir; duruma göre gruplayıp
+  // ayrı ayrı yazıyoruz. Akışı bitmiş olanlar atlanıyor.
+  const secili = filterRecords().filter(r => ordersView.sel.has(r.id));
+  const gruplar = {};
+  secili.forEach(r => { const n = NEXT_STATUS[r.durum]; if(n) (gruplar[n] ||= []).push(r.id); });
+  const adet = Object.values(gruplar).reduce((a, b) => a + b.length, 0);
+  if(!adet){ alert('Seçili işlerin hepsi akışın sonunda.'); return; }
+  if(!confirm(`${adet} işin durumu ilerletilecek. Devam?`)) return;
+  Object.entries(gruplar).forEach(([durum, ids]) => bulkPatch(ids, { durum }, 'Durum ilerletme'));
+}
+function bulkArchive(v){
+  const ids = [...ordersView.sel];
+  if(confirm(`${ids.length} iş arşivlenecek. Devam?`)) bulkPatch(ids, { archived: v }, 'Arşivleme');
+}
+function bulkPaid(v){
+  const ids = filterRecords().filter(r => ordersView.sel.has(r.id) && r.payout > 0).map(r => r.id);
+  if(!ids.length){ alert('Seçililerde ücreti olan iş yok.'); return; }
+  if(confirm(`${ids.length} iş ödendi olarak işaretlenecek. Devam?`)) bulkPatch(ids, { paid: v }, 'Ödeme işaretleme');
+}
+
+/* --- Ortak parçalar ------------------------------------------------------- */
+
+function selBox(r){
+  return `<input type="checkbox" class="sel" ${ordersView.sel.has(r.id)?'checked':''}
+    onclick="event.stopPropagation();toggleSel('${r.id}',this.checked)">`;
+}
+function nextBtn(r){
+  return NEXT_STATUS[r.durum]
+    ? `<button class="icon-btn go" onclick="event.stopPropagation();setStatus('${r.id}','${NEXT_STATUS[r.durum]}')">→ ${STATUS_LABEL[NEXT_STATUS[r.durum]]}</button>`
+    : '';
+}
+
+/* --- Görünümler ----------------------------------------------------------- */
+
+function cardHTML(r){
     const f=F(r.id); const netTL=netGelirTLof(r.id), kar=netTL-r.payout;
     const priceBlock=isAdmin()
       ? (hasFin(r.id)
@@ -398,5 +547,96 @@ function render(){
         ${(isAdmin()||!r.paid)?`<button class="icon-btn del" onclick="deleteRecord('${r.id}')">🗑 Sil</button>`:''}
         <input type="file" id="shot-${r.id}" accept="image/*" class="hidden" onchange="addShot('${r.id}',this)">
       </div></div>`;
-  }).join('');
+}
+
+function renderCards(list){
+  return list.map(cardHTML).join('');
+}
+
+function renderTable(list){
+  const admin = isAdmin();
+  const bas = `<tr>
+    <th class="c-sel"><input type="checkbox" class="sel" onclick="selAll(this.checked)"
+        ${list.length && ordersView.sel.size===list.length?'checked':''}></th>
+    <th>İş</th><th class="c-game">Oyun</th><th class="c-st">Durum</th>
+    ${admin?'<th class="c-b">Booster</th>':''}
+    <th class="c-track">Takip</th>
+    ${admin?'<th class="r c-m">Net Gelir</th><th class="r c-m">Kâr</th>':'<th class="r c-m">Kazancın</th>'}
+    <th class="c-act"></th></tr>`;
+  const satir = r => {
+    const net = netGelirTLof(r.id), kar = net - r.payout;
+    const para = admin
+      ? (hasFin(r.id)
+          ? `<td class="r c-m">${fmt(net,'TRY')}</td><td class="r c-m kar">${fmt(kar,'TRY')}</td>`
+          : `<td class="r c-m dim">—</td><td class="r c-m dim">—</td>`)
+      : `<td class="r c-m">${fmt(r.payout,'TRY')}</td>`;
+    return `<tr data-selrow="${r.id}" class="${ordersView.sel.has(r.id)?'picked':''}${r.archived?' arch':''}">
+      <td class="c-sel">${selBox(r)}</td>
+      <td class="o-job" onclick="openDetail('${r.id}')">
+        <div class="o-route">${routeHTML(r)}</div>
+        <div class="o-sub">${esc(r.tarih||'')}${r.riotId?' · '+esc(r.riotId):''}</div></td>
+      <td class="c-game"><span class="chip game">${esc(gameOf(r.game).short)}</span></td>
+      <td class="c-st"><span class="status ${r.durum}">${STATUS_LABEL[r.durum]}</span></td>
+      ${admin?`<td class="c-b">${r.boosterId?esc(nameOf(r.boosterId)):'<span class="dim">atanmadı</span>'}</td>`:''}
+      <td class="c-track">${trackChip(r)||'<span class="dim">—</span>'}</td>
+      ${para}
+      <td class="c-act">${nextBtn(r)}<button class="icon-btn" onclick="openDetail('${r.id}')">🔍</button></td>
+    </tr>`;
+  };
+  return `<div class="table-scroll"><table class="otable">
+    <thead>${bas}</thead><tbody>${list.map(satir).join('')}</tbody></table></div>`;
+}
+
+/* Pano: sürükle-bırak yerine kart üstündeki "→" butonu. Düz JS'te HTML5 DnD
+   dokunmatikte çalışmıyor ve yanlış sütuna bırakma geri alınamıyor —
+   NEXT_STATUS'ün tersi domain.json'da tanımlı değil. */
+function renderBoard(list){
+  const sutunlar = FORM_STATUSES.filter(k => k !== 'odendi');
+  return `<div class="board">${sutunlar.map(k => {
+    const kolon = list.filter(r => r.durum === k);
+    return `<div class="bcol">
+      <div class="bcol-h"><span class="status ${k}">${STATUS_LABEL[k]}</span><span class="bcol-n">${kolon.length}</span></div>
+      <div class="bcol-body">${kolon.map(r => `
+        <div class="bcard" data-selrow="${r.id}" onclick="openDetail('${r.id}')">
+          <div class="o-route">${routeHTML(r)}</div>
+          <div class="bcard-meta">
+            <span class="chip game">${esc(gameOf(r.game).short)}</span>
+            ${r.boosterId?`<span class="chip booster">${esc(nameOf(r.boosterId))}</span>`:''}
+            ${trackChip(r)}
+          </div>
+          <div class="bcard-foot">${nextBtn(r)}</div>
+        </div>`).join('') || '<div class="bcol-empty">boş</div>'}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function render(){
+  renderStats();
+  renderStatusTabs();
+  renderViewSwitch();
+
+  const list = filterRecords();
+  pruneSelection(list);
+  renderBulkBar();
+
+  // Tablo ve pano geniş alan istiyor; form gizleniyor ama SİLİNMİYOR —
+  // resetForm() ve editRecord() hâlâ o alanları okuyor.
+  const grid = document.getElementById('tab-siparis');
+  if(grid) grid.classList.toggle('wide', ordersView.mode !== 'kart');
+
+  const el = document.getElementById('recordList');
+  if(!list.length){
+    el.innerHTML = `<div class="empty"><div class="big">${records.length?'Sonuç yok':'Henüz iş yok'}</div>
+      <div>${isAdmin()?'Soldaki formdan ekle.':'Soldaki formdan işini kendin ekleyebilirsin.'}</div></div>`;
+  } else if(ordersView.mode === 'tablo'){
+    el.innerHTML = renderTable(list);
+  } else if(ordersView.mode === 'pano'){
+    el.innerHTML = renderBoard(list);
+  } else {
+    el.innerHTML = renderCards(list);
+  }
+
+  // Genel Bakış açıksa o da tazelensin. Erken return'lerin ARKASINDA değil.
+  if(currentTab === 'genel') renderOverview();
+  renderShell();
 }
