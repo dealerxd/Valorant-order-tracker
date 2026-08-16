@@ -9,8 +9,14 @@ function rowToRec(r){
     boosterId:r.booster_id||null,payout:Number(r.booster_payout)||0,paid:!!r.paid,
     archived:!!r.archived,created:r.created_at||''};
 }
+/* Kusak sayaci: iki loadAll ust uste calisirsa gec donen BAYAT olan ekrani
+   ezebiliyordu (toplu islem + realtime ayni anda tetikliyor). Yalnizca en son
+   baslatilan yukleme ekrana yaziyor. */
+let loadSeq = 0;
+
 async function loadAll(){
   if(!me) return;
+  const benimSira = ++loadSeq;
   setSync('','● yükleniyor…');
   const [rRes,pRes,fRes,iRes,tRes]=await Promise.all([
     sb.from(TABLES.orders).select('*').order('created_at',{ascending:false}),
@@ -22,6 +28,7 @@ async function loadAll(){
     // detail.js drawer açılınca ayrıca alıyor.
     sb.from(TABLES.state).select('*')
   ]);
+  if(benimSira !== loadSeq) return;        // daha yenisi baslamis, bunu yazma
   if(rRes.error){ setSync('err','● hata'); alert('Veri çekilemedi: '+rRes.error.message); return; }
   records=(rRes.data||[]).map(rowToRec);
   people=pRes.data||[];

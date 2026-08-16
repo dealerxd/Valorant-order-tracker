@@ -393,6 +393,151 @@ with sync_playwright() as p:
     """)
     check(".hidden tasiyan her eleman gercekten gizli", not sizmis, str(sizmis[:5]))
 
+    # --- Doğrulama turunda bulunan hataların regresyon testleri -----------
+    page.evaluate("""
+      me = { id:'admin1', role:'admin', display_name:'Rex' };
+      records = [
+        {id:'A',game:'valorant',orderType:'rank',baslangic:'Gold 1',hedef:'Plat 1',winCount:0,
+         jobDesc:'',startRR:0,region:'TR',riotId:'',extras:[],extraWin:false,durum:'devam',
+         tarih:'2026-08-16',not:'',image:null,boosterId:'b1',payout:400,paid:false,
+         archived:false,created:'2026-08-15T10:00:00'},
+        {id:'B',game:'valorant',orderType:'rank',baslangic:'Gold 1',hedef:'Plat 1',winCount:0,
+         jobDesc:'',startRR:0,region:'TR',riotId:'',extras:[],extraWin:false,durum:'tamam',
+         tarih:'2026-08-16',not:'',image:null,boosterId:'b1',payout:800,paid:false,
+         archived:false,created:'2026-08-15T10:00:00'},
+        {id:'C',game:'valorant',orderType:'rank',baslangic:'Gold 1',hedef:'Plat 1',winCount:0,
+         jobDesc:'',startRR:0,region:'TR',riotId:'',extras:[],extraWin:false,durum:'devam',
+         tarih:'2026-08-16',not:'',image:null,boosterId:'b1',payout:500,paid:false,
+         archived:false,created:'2026-08-15T10:00:00'}
+      ];
+      finance = { A:{platform:'E',cost:25,costCur:'USD',feePct:10,costTL:1000,rate:40},
+                  B:{platform:'E',cost:50,costCur:'USD',feePct:0, costTL:2000,rate:40} };
+      tracker = {};
+      switchTab('siparis'); render();
+    """)
+    page.wait_for_timeout(120)
+
+    # Aynı etiket, aynı sayı: Siparişler stat satırı ile Genel Bakış KPI'ı
+    stat_kar = page.eval_on_selector_all("#statsRow .stat",
+        "els => { const e = els.find(x => x.textContent.includes('Net Kâr'));"
+        " return e ? e.querySelector('.value').textContent.trim() : null; }")
+    page.evaluate("switchTab('genel')"); page.wait_for_timeout(120)
+    ov_kar = page.eval_on_selector_all(".ov-kpi",
+        "els => { const e = els.find(x => x.textContent.includes('Net kâr'));"
+        " return e ? e.querySelector('.ov-kpi-v').textContent.trim() : null; }")
+    check("Net kâr iki ekranda ayni", stat_kar == ov_kar, f"siparisler={stat_kar} genel={ov_kar}")
+
+    # Booster'in ILK isi: form varsayilanlari giris YAPILMADAN kuruluyor
+    # (me=null), o an durum 'yeni'ye dusuyordu. Bot 'yeni' siparisleri
+    # yoklamiyor -> ilk is sessizce takipsiz kalirdi. afterLogin artik rol
+    # belli olduktan sonra resetForm() cagiriyor.
+    page.evaluate("me = { id:'b9', role:'booster', display_name:'Yeni' };"
+                  "buildTabs(); applyRoleUI(); resetForm();")
+    check("booster girisinden sonra form varsayilani 'atandi'",
+          page.eval_on_selector("#durum", "e => e.value") == "atandi",
+          page.eval_on_selector("#durum", "e => e.value"))
+    page.evaluate("me = { id:'admin1', role:'admin', display_name:'Rex' };"
+                  "buildTabs(); applyRoleUI(); resetForm();")
+    check("admin girisinden sonra form varsayilani 'yeni'",
+          page.eval_on_selector("#durum", "e => e.value") == "yeni")
+    page.evaluate("switchTab('siparis'); render();")
+
+    page.evaluate("switchTab('siparis'); render();")
+    stat_borc = page.eval_on_selector_all("#statsRow .stat",
+        "els => { const e = els.find(x => x.textContent.includes('Booster Borcu'));"
+        " return e ? e.querySelector('.value').textContent.trim() : null; }")
+    page.evaluate("switchTab('genel')"); page.wait_for_timeout(120)
+    ov_borc = page.eval_on_selector_all(".ov-kpi",
+        "els => { const e = els.find(x => x.textContent.includes('Booster borcu'));"
+        " return e ? e.querySelector('.ov-kpi-v').textContent.trim() : null; }")
+    check("Booster borcu iki ekranda ayni", stat_borc == ov_borc, f"{stat_borc} / {ov_borc}")
+
+    # Finans kaydi olmayan is varsa Net kar ipucu bunu SOYLEMELI
+    check("finanssiz is ipucta belirtiliyor",
+          "girilmemiş" in page.eval_on_selector_all(".ov-kpi",
+            "els => { const e = els.find(x => x.textContent.includes('Net kâr'));"
+            " return e ? e.querySelector('.ov-kpi-h').textContent : ''; }"))
+
+    # Zarar kirmizi gosterilmeli
+    page.evaluate("records.forEach(r => r.payout = 99999); render(); renderOverview();")
+    check("zarar kirmizi gosteriliyor",
+          page.eval_on_selector_all(".ov-kpi",
+            "els => { const e = els.find(x => x.textContent.includes('Net kâr'));"
+            " return e ? e.className : ''; }").find("red") >= 0)
+    page.evaluate("records.forEach((r,i) => r.payout = [400,800,500][i]);")
+
+    # 'Acik siparis' KPI'i tiklayinca AYNI sayiyi gostermeli
+    page.evaluate("switchTab('genel')"); page.wait_for_timeout(120)
+    kpi_acik = page.eval_on_selector_all(".ov-kpi",
+        "els => { const e = els.find(x => x.textContent.includes('Açık sipariş'));"
+        " return e ? Number(e.querySelector('.ov-kpi-v').textContent) : -1; }")
+    page.evaluate("setOrdersFilter({durum:'acik',archive:'active'})")
+    check("Acik siparis KPI'i tiklayinca ayni sayi",
+          page.evaluate("filterRecords().length") == kpi_acik,
+          f"kpi={kpi_acik} liste={page.evaluate('filterRecords().length')}")
+    page.evaluate("setOrdersDurum('')")
+
+    # Yeni baglanan siparis aninda 'takildi' uyarisi uretmemeli
+    page.evaluate("tracker = { A:{order_id:'A',puuid:'p',start_elo:900,current_elo:900,"
+                  "target_elo:1100,paused:false,last_poll_at:new Date().toISOString(),"
+                  "last_match_at:null,loss_streak:0} };")
+    check("yeni baglanan siparis 'takildi' uyarisi uretmiyor",
+          page.evaluate("!alertModel().some(a => a.tur === 'takildi')"))
+    page.evaluate("tracker = {};")
+
+    # Bildirim noktasi SAYI degil KIMLIK karsilastirmali
+    page.evaluate("markNotifSeen();")
+    check("okundu isaretlenince nokta sonuyor",
+          page.eval_on_selector("#notifDot", "e => e.classList.contains('hidden')"))
+    page.evaluate("records[2].durum='devam'; records[2].boosterId=null; renderNotifDot();")
+    check("uyari sayisi artmasa da YENI uyari bildiriliyor",
+          not page.eval_on_selector("#notifDot", "e => e.classList.contains('hidden')"))
+
+    # Hayalet drawer: olmayan kayit drawer'i acmamali
+    page.evaluate("closeDetail(); openDetail('YOK-BOYLE-BIR-ID');")
+    check("olmayan kayit drawer'i acmiyor",
+          page.eval_on_selector("#drawer", "e => getComputedStyle(e).display") == "none")
+
+    # Tablo/pano modunda acik form render() ile kaybolmamali
+    page.evaluate("setOrdersView('tablo'); newOrder();")
+    page.evaluate("document.getElementById('not').value='yazmakta oldugum not'; render();")
+    check("render acik formu gizlemiyor",
+          page.eval_on_selector("#formPanel", "e => getComputedStyle(e).display") != "none")
+    check("formdaki yazi korundu",
+          page.eval_on_selector("#not", "e => e.value") == "yazmakta oldugum not")
+    page.evaluate("resetForm(); render();")
+    check("form kapaninca genis mod geri geliyor",
+          page.eval_on_selector("#formPanel", "e => getComputedStyle(e).display") == "none")
+    page.evaluate("setOrdersView('kart')")
+
+    # Eski 'odendi' kayitlari panoda gorunmeli
+    page.evaluate("records.push(Object.assign({},records[0],{id:'D',durum:'odendi'}));"
+                  "setOrdersView('pano'); render();")
+    check("odendi kaydi panoda sutun buluyor",
+          page.evaluate("[...document.querySelectorAll('.bcard')].length") == 4,
+          str(page.evaluate("[...document.querySelectorAll('.bcard')].length")))
+    check("odendi durum sekmesi cikti",
+          "Ödendi" in page.eval_on_selector("#statusTabs", "e => e.textContent"))
+    page.evaluate("records.pop(); setOrdersView('kart'); render();")
+
+    # XSS: durum ve metin alanlari attribute'a escape edilerek giriyor
+    # Payload argüman olarak geçiyor — kaynak dosyada tırnak kaçışıyla uğraşmamak için.
+    page.evaluate("p => { records[0].durum = p; render(); }",
+                  'x" onmouseover="window.__xss=1')
+    page.evaluate("setOrdersView('tablo'); render();")
+    check("tabloda attribute enjeksiyonu yok",
+          page.evaluate("window.__xss === undefined"))
+    page.evaluate("setOrdersView('pano'); render();")
+    check("panoda attribute enjeksiyonu yok", page.evaluate("window.__xss === undefined"))
+    page.evaluate("records[0].durum='devam'; setOrdersView('kart'); render();")
+
+    # Booster panoda diger boosterlarin adini gormemeli
+    page.evaluate("me={id:'b1',role:'booster',display_name:'Ali'}; applyRoleUI();"
+                  "setOrdersView('pano'); render();")
+    check("booster panoda booster adi gormuyor",
+          page.eval_on_selector_all(".bcard .chip.booster", "e => e.length") == 0)
+    page.evaluate("me={id:'admin1',role:'admin',display_name:'Rex'}; setOrdersView('kart'); render();")
+
     browser.close()
 
 print(f"\n{'BASARISIZ: ' + ', '.join(failures) if failures else 'panel kontrolleri gecti.'}")

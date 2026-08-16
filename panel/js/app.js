@@ -106,11 +106,18 @@ function renderBotBox(){
    Kendi uyarı listesini KURMUYOR, ui-common.js'teki alertModel()'i tüketiyor.
    Ayrı hesaplasaydı zil "7" derken Genel Bakış kartı "4" derdi. */
 
+/* "Görüldü" kaydı SAYIYA değil uyarı kimliğine bağlı. Sayı karşılaştırırken
+   eski uyarılar çözülüp yenileri geldiğinde toplam artmıyor ve kritik bir
+   uyarı (takıldı, kayıp serisi) hiç bildirilmiyordu. */
+const alertKey = a => a.tur + ':' + (a.id || '');
+
 function renderNotifDot(){
   const dot = document.getElementById('notifDot'); if(!dot) return;
-  const n = alertModel().length;
-  const gorulen = Number(lsGet('notifSeen', '0')) || 0;
-  dot.classList.toggle('hidden', n === 0 || n <= gorulen);
+  const simdi = alertModel().map(alertKey);
+  let gorulen = [];
+  try { gorulen = JSON.parse(lsGet('notifSeen', '[]')) || []; } catch(e){}
+  const yeni = simdi.filter(k => !gorulen.includes(k));
+  dot.classList.toggle('hidden', yeni.length === 0);
 }
 
 function toggleNotif(e){
@@ -140,7 +147,7 @@ function closeNotif(){
 }
 
 function markNotifSeen(){
-  lsSet('notifSeen', String(alertModel().length));
+  lsSet('notifSeen', JSON.stringify(alertModel().map(alertKey)));
   renderNotifDot(); closeNotif();
 }
 
@@ -148,12 +155,13 @@ document.addEventListener('click', e => {
   if(!e.target.closest('.notif-wrap')) closeNotif();
 });
 
-/* Escape sırası: drawer varsa onu kapat (detail.js kendi dinleyicisinde),
-   yoksa bildirim, o da yoksa aramayı temizle. Üç dinleyici aynı anda
-   tetiklenmesin diye burada yalnızca drawer kapalıyken iş yapıyoruz. */
+/* Escape zinciri TEK dinleyicide: en üstteki katmandan başlayıp bir tanesini
+   kapatıp çıkıyor. İki ayrı dinleyici olduğunda tek tuş hem drawer'ı kapatıyor
+   hem arama kutusunu siliyordu. */
 document.addEventListener('keydown', e => {
   if(e.key !== 'Escape') return;
-  if(!document.getElementById('drawer').classList.contains('hidden')) return;
+  const drawer = document.getElementById('drawer');
+  if(drawer && !drawer.classList.contains('hidden')){ closeDetail(); return; }
   const pop = document.getElementById('notifPop');
   if(pop && !pop.classList.contains('hidden')){ closeNotif(); return; }
   const s = document.getElementById('search');
@@ -165,7 +173,8 @@ document.addEventListener('keydown', e => {
    gerekiyor. resetForm() zaten görünürlüğü ayarlıyor (bkz. orders.js). */
 function newOrder(){
   switchTab('siparis');
-  resetForm();
+  resetForm();      // alanlari temizler ve formAcik'i false yapar
+  showForm();       // ...sonra kullanici icin acik tutar (tablo/pano modunda sart)
   document.getElementById('formPanel')?.scrollIntoView({ behavior:'smooth', block:'start' });
 }
 

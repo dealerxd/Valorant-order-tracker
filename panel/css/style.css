@@ -490,3 +490,8 @@ input.sel{width:15px;height:15px;accent-color:var(--gold);cursor:pointer}
      satırında çağrılıyor; silinirse hiçbir veri yüklenmez. */
   #syncStatus{display:none}
 }
+
+/* Grid öğesinin varsayılan min-width:auto'su tabloyu/panoyu daraltmıyor;
+   geniş içerik tüm sayfayı yatay taşırıyor ve sağa kaydırınca sidebar,
+   topbar ve çıkış butonu ekran dışında kalıyordu. */
+.grid > *{min-width:0}

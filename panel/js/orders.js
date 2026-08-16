@@ -207,7 +207,7 @@ async function saveRecord(){
 }
 function editRecord(id){
   const r=records.find(x=>x.id===id); if(!r)return; editId=id; const f=F(id);
-  switchTab('siparis'); showForm();
+  switchTab('siparis'); showForm();   // duzenlemede form acik kalmali
   document.getElementById('gameSel').value=r.game||DEFAULT_GAME;
   onGameChange();                       // rank listelerini bu oyuna gore doldur
   document.getElementById('orderType').value=r.orderType||'rank';
@@ -244,12 +244,26 @@ function editRecord(id){
 /* Tablo/pano modunda .wide form sütununu gizliyor. Forma dönen her yol
    (yeni sipariş butonu, düzenle, uyarıdan gelen bağlantı) buradan geçtiği
    için görünürlüğü tek yerde geri alıyoruz. */
+/* Form acikligi ayri bir durum: render() bunu EZMEMELI. Aksi halde tablo/pano
+   modunda kullanici formu doldururken gelen her realtime tazelemesi ya da
+   arama tusu formu gizliyor ve girilen veri gozden kayboluyordu. */
+let formAcik = false;
+
 function showForm(){
+  formAcik = true;
   document.getElementById('tab-siparis')?.classList.remove('wide');
+}
+function hideFormIfWide(){
+  // Form acik degilse genis moda izin ver; acikken dokunma.
+  const grid = document.getElementById('tab-siparis'); if(!grid) return;
+  grid.classList.toggle('wide', ordersView.mode !== 'kart' && !formAcik);
 }
 
 function resetForm(){
-  showForm();
+  // resetForm hem "iptal" hem "kayittan sonra" yolunda cagriliyor - ikisinde de
+  // form KAPANIYOR. Kullanicinin formu acik tutmasi showForm() ile oluyor.
+  formAcik = false;
+  hideFormIfWide();
   editId=null;formImage=null;
   ['payout','not','cost','platformRef','rate','jobDesc','riotId'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('orderType').value='rank';
@@ -323,16 +337,14 @@ function renderStats(){
   const el=document.getElementById('statsRow');
   const active=records.filter(r=>!r.archived);
   if(isAdmin()){
-    const finli=active.filter(r=>hasFin(r.id));
-    const ciro=finli.reduce((s,r)=>s+brutTLof(r.id),0);
-    const kar=finli.reduce((s,r)=>s+netGelirTLof(r.id)-r.payout,0);
-    const borc=active.filter(r=>!r.paid&&r.boosterId).reduce((s,r)=>s+r.payout,0);
+    // Tanimlar ui-common.js'te; Rapor ve Genel Bakis ayni hesabi kullaniyor.
+    const P=paraOzeti(), ciro=P.brut, kar=P.kar, borc=P.borc;
     const acik=active.filter(r=>!['tamam','odendi'].includes(r.durum)).length;
     el.style.gridTemplateColumns='repeat(4,1fr)';
     el.innerHTML=`
       <div class="stat"><div class="label">Aktif Sipariş</div><div class="value">${active.length} <small>(${acik} açık)</small></div></div>
       <div class="stat gold"><div class="label">Brüt Gelir (TL)</div><div class="value" style="font-size:20px">${fmt(ciro,'TRY')}</div></div>
-      <div class="stat green"><div class="label">Net Kâr</div><div class="value" style="font-size:20px">${fmt(kar,'TRY')}</div></div>
+      <div class="stat ${kar<0?'red':'green'}"><div class="label">Net Kâr</div><div class="value" style="font-size:20px">${fmt(kar,'TRY')}</div></div>
       <div class="stat red"><div class="label">Booster Borcu</div><div class="value">${fmt(borc,'TRY')}</div></div>`;
   } else {
     const kazanc=active.reduce((s,r)=>s+r.payout,0);
@@ -392,7 +404,10 @@ function filterRecords(){
     if(fa === 'active' && r.archived) return false;
     if(fa === 'arch' && !r.archived) return false;
     if(fg && r.game !== fg) return false;
-    if(ordersView.durum && r.durum !== ordersView.durum) return false;
+    // 'acik' sanal bir durum: akışı bitmemiş işler. Genel Bakış'taki
+    // "Açık sipariş" KPI'ı buna bağlı, yoksa tıklayınca farklı sayı çıkardı.
+    if(ordersView.durum === 'acik'){ if(!isOpen(r)) return false; }
+    else if(ordersView.durum && r.durum !== ordersView.durum) return false;
     if(fb && r.boosterId !== fb) return false;
     if(!q) return true;
     return [r.baslangic, r.hedef, r.jobDesc, ORDER_TYPES[r.orderType], gameOf(r.game).label,
@@ -402,20 +417,34 @@ function filterRecords(){
 
 /* Durum sekmesi sayaçları durum filtresini YOK SAYAR, diğer filtreleri sayar —
    yoksa seçili sekmenin dışındaki her sekme 0 gösterirdi. */
+/* Durum filtresi dışındaki filtrelerin sonucundaki durumlar. */
+function hepsiDurum(){
+  const tut = ordersView.durum; ordersView.durum = '';
+  const d = filterRecords().map(r => r.durum); ordersView.durum = tut;
+  return d;
+}
+
 function statusCounts(){
   const tut = ordersView.durum; ordersView.durum = '';
   const hepsi = filterRecords(); ordersView.durum = tut;
   const c = { '': hepsi.length };
-  FORM_STATUSES.forEach(k => c[k] = hepsi.filter(r => r.durum === k).length);
+  hepsi.forEach(r => { c[r.durum] = (c[r.durum] || 0) + 1; });
+  FORM_STATUSES.forEach(k => c[k] = c[k] || 0);
   return c;
 }
 
 function renderStatusTabs(){
   const box = document.getElementById('statusTabs'); if(!box) return;
   const c = statusCounts();
-  const tabs = [['', 'Tümü']].concat(FORM_STATUSES.map(k => [k, STATUS_LABEL[k]]));
+  // Veride bulunan ama formda seçilemeyen durumlar (eski 'odendi') da sekme
+  // alsın; yoksa "Tümü" onları sayar ama hiçbir sekmede görünmezler.
+  const veride = [...new Set(hepsiDurum())];
+  const ekstra = veride.filter(k => !FORM_STATUSES.includes(k));
+  const tabs = [['', 'Tümü']]
+    .concat(FORM_STATUSES.filter(k => k !== 'odendi' || veride.includes(k)).concat(ekstra)
+            .map(k => [k, STATUS_LABEL[k] || k]));
   box.innerHTML = tabs.map(([k, l]) =>
-    `<button class="st-tab${k===ordersView.durum?' active':''}" onclick="setOrdersDurum('${k}')">
+    `<button class="st-tab${k===ordersView.durum?' active':''}" onclick="setOrdersDurum('${esc(k)}')">
        ${esc(l)}<span class="st-n">${c[k] || 0}</span></button>`).join('');
 }
 
@@ -496,7 +525,7 @@ function bulkPaid(v){
 
 function selBox(r){
   return `<input type="checkbox" class="sel" ${ordersView.sel.has(r.id)?'checked':''}
-    onclick="event.stopPropagation();toggleSel('${r.id}',this.checked)">`;
+    onclick="event.stopPropagation();toggleSel('${esc(r.id)}',this.checked)">`;
 }
 function nextBtn(r){
   return NEXT_STATUS[r.durum]
@@ -570,13 +599,13 @@ function renderTable(list){
           ? `<td class="r c-m">${fmt(net,'TRY')}</td><td class="r c-m kar">${fmt(kar,'TRY')}</td>`
           : `<td class="r c-m dim">—</td><td class="r c-m dim">—</td>`)
       : `<td class="r c-m">${fmt(r.payout,'TRY')}</td>`;
-    return `<tr data-selrow="${r.id}" class="${ordersView.sel.has(r.id)?'picked':''}${r.archived?' arch':''}">
+    return `<tr data-selrow="${esc(r.id)}" class="${ordersView.sel.has(r.id)?'picked':''}${r.archived?' arch':''}">
       <td class="c-sel">${selBox(r)}</td>
       <td class="o-job" onclick="openDetail('${r.id}')">
         <div class="o-route">${routeHTML(r)}</div>
         <div class="o-sub">${esc(r.tarih||'')}${r.riotId?' · '+esc(r.riotId):''}</div></td>
       <td class="c-game"><span class="chip game">${esc(gameOf(r.game).short)}</span></td>
-      <td class="c-st"><span class="status ${r.durum}">${STATUS_LABEL[r.durum]}</span></td>
+      <td class="c-st"><span class="status ${esc(r.durum)}">${esc(STATUS_LABEL[r.durum]||r.durum)}</span></td>
       ${admin?`<td class="c-b">${r.boosterId?esc(nameOf(r.boosterId)):'<span class="dim">atanmadı</span>'}</td>`:''}
       <td class="c-track">${trackChip(r)||'<span class="dim">—</span>'}</td>
       ${para}
@@ -591,17 +620,22 @@ function renderTable(list){
    dokunmatikte çalışmıyor ve yanlış sütuna bırakma geri alınamıyor —
    NEXT_STATUS'ün tersi domain.json'da tanımlı değil. */
 function renderBoard(list){
-  const sutunlar = FORM_STATUSES.filter(k => k !== 'odendi');
+  // Formda seçilemeyen ama veride bulunabilen durumlar da sütun almalı —
+  // eski 'odendi' kayıtları aksi hâlde panoda hiç görünmüyor ama "Tümü"
+  // sayacına dahil oluyordu. Böyle kayıt yoksa sütun da eklenmiyor.
+  const ekstra = [...new Set(list.map(r => r.durum))].filter(k => !FORM_STATUSES.includes(k));
+  const sutunlar = FORM_STATUSES.filter(k => k !== 'odendi' || list.some(r => r.durum === 'odendi'))
+    .concat(ekstra);
   return `<div class="board">${sutunlar.map(k => {
     const kolon = list.filter(r => r.durum === k);
     return `<div class="bcol">
-      <div class="bcol-h"><span class="status ${k}">${STATUS_LABEL[k]}</span><span class="bcol-n">${kolon.length}</span></div>
+      <div class="bcol-h"><span class="status ${esc(k)}">${esc(STATUS_LABEL[k]||k)}</span><span class="bcol-n">${kolon.length}</span></div>
       <div class="bcol-body">${kolon.map(r => `
-        <div class="bcard" data-selrow="${r.id}" onclick="openDetail('${r.id}')">
+        <div class="bcard" data-selrow="${esc(r.id)}" onclick="openDetail('${esc(r.id)}')">
           <div class="o-route">${routeHTML(r)}</div>
           <div class="bcard-meta">
             <span class="chip game">${esc(gameOf(r.game).short)}</span>
-            ${r.boosterId?`<span class="chip booster">${esc(nameOf(r.boosterId))}</span>`:''}
+            ${isAdmin()&&r.boosterId?`<span class="chip booster">${esc(nameOf(r.boosterId))}</span>`:''}
             ${trackChip(r)}
           </div>
           <div class="bcard-foot">${nextBtn(r)}</div>
@@ -621,8 +655,7 @@ function render(){
 
   // Tablo ve pano geniş alan istiyor; form gizleniyor ama SİLİNMİYOR —
   // resetForm() ve editRecord() hâlâ o alanları okuyor.
-  const grid = document.getElementById('tab-siparis');
-  if(grid) grid.classList.toggle('wide', ordersView.mode !== 'kart');
+  hideFormIfWide();
 
   const el = document.getElementById('recordList');
   if(!list.length){
@@ -638,5 +671,6 @@ function render(){
 
   // Genel Bakış açıksa o da tazelensin. Erken return'lerin ARKASINDA değil.
   if(currentTab === 'genel') renderOverview();
+  renderDetail();   // drawer açıksa içindeki durum/para da tazelensin
   renderShell();
 }

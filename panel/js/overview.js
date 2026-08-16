@@ -37,20 +37,18 @@ function ovKpis(){
     ];
   }
 
-  const finansli = activeRecs().filter(r => hasFin(r.id));
-  const brut = finansli.reduce((a,r) => a + brutTLof(r.id), 0);
-  const net  = finansli.reduce((a,r) => a + netGelirTLof(r.id), 0);
-  const ucret = activeRecs().reduce((a,r) => a + r.payout, 0);
-  const borc = activeRecs().filter(r => !r.paid && !isOpen(r) && r.payout > 0)
-                           .reduce((a,r) => a + r.payout, 0);
+  const P = paraOzeti();
   return [
     { etiket:'Açık sipariş', deger:String(acik.length), renk:'gold',
-      ipucu:`${activeRecs().length} aktif kayıt`, git:{ durum:'', archive:'active' } },
-    { etiket:'Brüt gelir',   deger:fmt(brut,'TRY'),    renk:'blue',
-      ipucu:`${finansli.length} finans kaydı` },
-    { etiket:'Net kâr',      deger:fmt(net - ucret,'TRY'), renk:'green',
-      ipucu:'komisyon ve booster ücreti düşülmüş' },
-    { etiket:'Booster borcu',deger:fmt(borc,'TRY'),    renk:'red',
+      ipucu:`${activeRecs().length} aktif kayıt`, git:{ durum:'acik', archive:'active' } },
+    { etiket:'Brüt gelir',   deger:fmt(P.brut,'TRY'),  renk:'blue',
+      ipucu:`${activeRecs().length - P.finanssiz} işin finansı girili` },
+    // Zarar yeşil gösterilmemeli — kâr gibi okunur.
+    { etiket:'Net kâr',      deger:fmt(P.kar,'TRY'),   renk:P.kar < 0 ? 'red' : 'green',
+      ipucu: P.finanssiz
+        ? `${P.finanssiz} işin boost fiyatı girilmemiş — ücreti düşülüyor, geliri sayılmıyor`
+        : 'komisyon ve booster ücreti düşülmüş' },
+    { etiket:'Booster borcu',deger:fmt(P.borc,'TRY'),  renk:'red',
       ipucu:'biten ama ödenmemiş' },
   ];
 }

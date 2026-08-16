@@ -29,6 +29,10 @@ function trackChip(r){
 }
 
 function openDetail(id){
+  // Kayıt yoksa drawer'ı hiç açma: gövdesinde ÖNCEKİ siparişin parası kalır ve
+  // butonları o siparişe yazar. (Silinen ya da filtre dışı bir id'ye tıklamak
+  // realtime tazelemesinden sonra mümkün.)
+  if(!records.some(r => r.id === id)) return;
   drawerId = id;
   drawerMatches = TRACK_EMPTY;
   renderDetail();
@@ -169,5 +173,6 @@ function renderDetail(){
     </div>`;
 }
 
-/* Esc ile kapat — drawer modal gibi davranıyor. */
-document.addEventListener('keydown', e => { if(e.key === 'Escape' && drawerId) closeDetail(); });
+/* Escape zinciri tek yerde toplandı: app.js'teki dinleyici önce drawer'a
+   bakıyor. İki ayrı dinleyici olduğunda tek tuş hem drawer'ı kapatıyor hem
+   arama kutusunu siliyordu. */

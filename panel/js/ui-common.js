@@ -104,13 +104,43 @@ function alertModel(){
         push('baglanmadi', 2, `#${r.id.slice(0,8)} Riot ID girildi, bağlanmadı`, r);
       if(t && t.paused)
         push('duraklatildi', 2, `#${r.id.slice(0,8)} takip duraklatıldı`, r);
-      if(t && !t.paused && hoursSince(t.last_match_at) > UI.STALL_H)
+      // last_match_at bos = henuz hic mac cekilmemis (yeni baglandi).
+      // hoursSince(null) Infinity donuyor; bot da bu durumda uyarmiyor
+      // (tracker.py _handle_idle son mac yoksa baslangic zamanina bakiyor).
+      if(t && !t.paused && t.last_match_at && hoursSince(t.last_match_at) > UI.STALL_H)
         push('takildi', 3, `#${r.id.slice(0,8)} ${UI.STALL_H} saattir maç yok`, r);
       if(t && (t.loss_streak || 0) >= UI.LOSS_N)
         push('kayip', 3, `#${r.id.slice(0,8)} üst üste ${t.loss_streak} mağlubiyet`, r);
     }
   }
   return out.sort((a,b) => b.agirlik - a.agirlik);
+}
+
+/* --- Para tanimlari -------------------------------------------------------
+
+   Ayni etiket ("Net Kar", "Booster Borcu") uc ekranda uc farkli hesap
+   uretiyordu. Rapor ve Genel Bakis ayni konvansiyonu kullaniyordu, Siparisler
+   satiri ayrikti - ayni veriden 900 TL ve 1700 TL cikiyordu. Tanim artik burada.
+
+   Konvansiyon (report.js'ten): GELIR yalnizca finans kaydi olan islerden,
+   BOOSTER UCRETI tum aktif islerden. Finans kaydi girilmemis bir isin ucreti
+   odenecek ama geliri henuz bilinmiyor - onu kardan dusmemek kari sisirirdi.
+   Bu yuzden ekranlarda "N isin finansi girilmemis" uyarisi da veriliyor. */
+function paraOzeti(){
+  const aktif = activeRecs();
+  const finansli = aktif.filter(r => hasFin(r.id));
+  const brut = finansli.reduce((a,r) => a + brutTLof(r.id), 0);
+  const netGelir = finansli.reduce((a,r) => a + netGelirTLof(r.id), 0);
+  const ucret = aktif.reduce((a,r) => a + r.payout, 0);
+  return {
+    brut, netGelir, ucret,
+    kar: netGelir - ucret,
+    finanssiz: aktif.filter(r => r.durum !== 'yeni' && !hasFin(r.id)).length,
+    // Borc = isi biten ama odenmemis ucretler. Devam eden isin ucreti henuz
+    // borc degil; is yarim kalirsa odenmeyebilir.
+    borc: aktif.filter(r => !isOpen(r) && !r.paid && r.payout > 0)
+               .reduce((a,r) => a + r.payout, 0),
+  };
 }
 
 /* Nav rozetleri. Boş/0 dönerse rozet çizilmez. */

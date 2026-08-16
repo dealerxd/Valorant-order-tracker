@@ -43,7 +43,13 @@ async function afterLogin(){
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   renderMeCard();
-  buildTabs(); applyRoleUI(); switchTab(currentTab);
+  buildTabs(); applyRoleUI();
+  // Form varsayilanlari rol belli olduktan SONRA yeniden kurulmali: app.js
+  // sonundaki resetForm() giris yapilmadan calisiyor ve o an me=null oldugu
+  // icin durum 'yeni'ye dusuyor. Booster'in ilk isi boyle kaydedilirse bot
+  // onu hic yoklamaz ('yeni' ACTIVE_STATUSES'ta degil).
+  resetForm();
+  switchTab(currentTab);
   await loadPricing(); await loadAll(); subscribeRealtime();
   onMoneyChange();
 }
