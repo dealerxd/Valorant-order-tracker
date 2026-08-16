@@ -19,12 +19,14 @@ import httpx
 
 from domain import (
     ACTIVE_STATUSES,
+    DEFAULT_GAME,
     DEFAULT_REGION_API,
     LISTABLE_STATUSES,
     MATCHES_TABLE,
     ORDERS_TABLE,
     PANEL_REGION_TO_API,
     STATE_TABLE,
+    TRACKED_GAMES,
 )
 
 log = logging.getLogger(__name__)
@@ -33,12 +35,17 @@ log = logging.getLogger(__name__)
 # geliyor - panel de ayni dosyayi okuyor. Panelde bir durum yeniden
 # adlandirildiginda tracker'in sessizce yoklamayi birakmasi boyle onleniyor.
 __all__ = [
-    "ACTIVE_STATUSES", "LISTABLE_STATUSES", "PANEL_REGION_TO_API",
-    "Store", "StoreError", "handle_of", "panel_region_to_api",
+    "ACTIVE_STATUSES", "DEFAULT_GAME", "LISTABLE_STATUSES", "PANEL_REGION_TO_API",
+    "TRACKED_GAMES", "Store", "StoreError", "handle_of", "panel_region_to_api",
 ]
 
 HANDLE_LEN = 8
 MIN_HANDLE_LEN = 4
+
+# Panel birden fazla oyunun siparisini tutuyor ama bot yalnizca Valorant'i
+# takip edebiliyor. Bu filtre olmadan bot bir Rocket League siparisinin
+# "Grand Champion II" hedefini Valorant rank'i sanip her turda hata uretirdi.
+_TRACKED_GAME_FILTER = f"in.({','.join(TRACKED_GAMES)})"
 
 
 def panel_region_to_api(region: str | None) -> str:
@@ -121,6 +128,7 @@ class Store:
             "tag": tag or "?",
             "panel_region": row.get("region"),
             "durum": row.get("durum"),
+            "game": row.get("game") or DEFAULT_GAME,
             "order_type": row.get("order_type"),
             "baslangic": row.get("baslangic"),
             "hedef": row.get("hedef"),
@@ -155,6 +163,7 @@ class Store:
         rows = await self._select(ORDERS_TABLE, {
             "select": self._SELECT,
             "durum": f"in.({','.join(ACTIVE_STATUSES)})",
+            "game": _TRACKED_GAME_FILTER,
             "archived": "eq.false",
             "order": "created_at.desc",
         })
@@ -166,6 +175,7 @@ class Store:
         rows = await self._select(ORDERS_TABLE, {
             "select": self._SELECT,
             "durum": f"in.({','.join(LISTABLE_STATUSES)})",
+            "game": _TRACKED_GAME_FILTER,
             "archived": "eq.false",
             "order": "created_at.desc",
         })
@@ -181,6 +191,7 @@ class Store:
         rows = await self._select(ORDERS_TABLE, {
             "select": self._SELECT,
             "durum": f"in.({','.join(ACTIVE_STATUSES)})",
+            "game": _TRACKED_GAME_FILTER,
             "archived": "eq.false",
             "order": "created_at.desc",
         })

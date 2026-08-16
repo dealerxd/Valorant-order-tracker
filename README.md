@@ -26,6 +26,29 @@ listesi üç yerde: panel HTML'i, panel JS'i, tracker'ın `store.py`'si). Paneld
 bir durum yeniden adlandırılsa tracker **hata vermeden** yoklamayı keserdi —
 sipariş takip ediliyor görünür, hiç bildirim gelmezdi.
 
+## Oyunlar
+
+Panel beş oyunun siparişini tutuyor; **bot yalnızca Valorant'ı takip ediyor.**
+
+| Oyun | Panel | Takip botu |
+|---|---|---|
+| Valorant | ✓ | ✓ maç maç RR |
+| Overwatch 2 · Marvel Rivals · Rocket League · Wild Rift | ✓ | — |
+
+Diğerlerinin maç başına ilerleme veren bir API'si yok (gerekçe:
+[`tracker/README.md`](tracker/README.md)). Bu oyunlarda panel sipariş, fiyat ve
+booster yönetimi yapıyor, otomatik bildirim göndermiyor.
+
+Ayrım `shared/domain.json` → `games[].tracked` bayrağında. Tracker poll
+sorgusu bu bayrağa göre süzüyor — filtre olmasa bot bir Rocket League
+siparişinin `Grand Champion II` hedefini Valorant rank'ı sanıp her turda hata
+üretirdi. Rank isimleri oyunlar arasında örtüşüyor (`Bronze 3` hem Valorant'ta
+hem OW2'de var, anlamları farklı), o yüzden koruma etiket değil sorgu
+düzeyinde.
+
+Yeni oyun eklemek: `domain.json` → `games` içine bir kayıt, `python
+shared/generate.py`. Şema değişmiyor, `resells.game` metin alanı.
+
 ## Ortak sözleşme
 
 `shared/domain.json` tek kaynak. Rank tablosu, bölge eşlemesi, sipariş

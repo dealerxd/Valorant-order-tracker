@@ -7,6 +7,16 @@
 /* Tablo isimleri (tracker ayni dosyadan okuyor) */
 const TABLES = {"orders": "resells", "state": "tracker_state", "matches": "tracker_matches"};
 
+/* ---- Oyunlar ---- */
+/* tracked=false olanlarin takip botu yok; panel yine de siparis, fiyat
+   ve booster yonetimi yapiyor. Bkz. shared/domain.json */
+const GAMES = [{"id": "valorant", "label": "Valorant", "short": "VAL", "tracked": true}, {"id": "ow2", "label": "Overwatch 2", "short": "OW2", "tracked": false}, {"id": "rivals", "label": "Marvel Rivals", "short": "MR", "tracked": false}, {"id": "rl", "label": "Rocket League", "short": "RL", "tracked": false}, {"id": "wildrift", "label": "Wild Rift", "short": "WR", "tracked": false}];
+const GAME_RANKS = {"valorant": ["Bronze 1", "Bronze 2", "Bronze 3", "Silver 1", "Silver 2", "Silver 3", "Gold 1", "Gold 2", "Gold 3", "Plat 1", "Plat 2", "Plat 3", "Diamond 1", "Diamond 2", "Diamond 3", "Ascendant 1", "Ascendant 2", "Ascendant 3", "Immortal 1", "Immortal 2", "Immortal 3"], "ow2": ["Bronze 5", "Bronze 4", "Bronze 3", "Bronze 2", "Bronze 1", "Silver 5", "Silver 4", "Silver 3", "Silver 2", "Silver 1", "Gold 5", "Gold 4", "Gold 3", "Gold 2", "Gold 1", "Platinum 5", "Platinum 4", "Platinum 3", "Platinum 2", "Platinum 1", "Emerald 5", "Emerald 4", "Emerald 3", "Emerald 2", "Emerald 1", "Diamond 5", "Diamond 4", "Diamond 3", "Diamond 2", "Diamond 1", "Master 5", "Master 4", "Master 3", "Master 2", "Master 1", "Grandmaster 5", "Grandmaster 4", "Grandmaster 3", "Grandmaster 2", "Grandmaster 1", "Champion"], "rivals": ["Bronze III", "Bronze II", "Bronze I", "Silver III", "Silver II", "Silver I", "Gold III", "Gold II", "Gold I", "Platinum III", "Platinum II", "Platinum I", "Diamond III", "Diamond II", "Diamond I", "Grandmaster III", "Grandmaster II", "Grandmaster I", "Celestial III", "Celestial II", "Celestial I", "Eternity"], "rl": ["Bronze I", "Bronze II", "Bronze III", "Silver I", "Silver II", "Silver III", "Gold I", "Gold II", "Gold III", "Platinum I", "Platinum II", "Platinum III", "Diamond I", "Diamond II", "Diamond III", "Champion I", "Champion II", "Champion III", "Grand Champion I", "Grand Champion II", "Grand Champion III", "Supersonic Legend"], "wildrift": ["Iron IV", "Iron III", "Iron II", "Iron I", "Bronze IV", "Bronze III", "Bronze II", "Bronze I", "Silver IV", "Silver III", "Silver II", "Silver I", "Gold IV", "Gold III", "Gold II", "Gold I", "Platinum IV", "Platinum III", "Platinum II", "Platinum I", "Emerald IV", "Emerald III", "Emerald II", "Emerald I", "Diamond IV", "Diamond III", "Diamond II", "Diamond I", "Master", "Grandmaster", "Challenger"]};
+const DEFAULT_GAME = "valorant";
+const gameOf = id => GAMES.find(g => g.id === id) || GAMES[0];
+const ranksOfGame = id => GAME_RANKS[id] || GAME_RANKS[DEFAULT_GAME];
+const isTrackedGame = id => gameOf(id).tracked;
+
 /* Panelde secilebilen rank'lar, dusukten yuksege.
    Iron ve Radiant bilincli olarak yok - bkz. shared/domain.json */
 const RANK_ORDER = ["Bronze 1", "Bronze 2", "Bronze 3", "Silver 1", "Silver 2", "Silver 3", "Gold 1", "Gold 2", "Gold 3", "Plat 1", "Plat 2", "Plat 3", "Diamond 1", "Diamond 2", "Diamond 3", "Ascendant 1", "Ascendant 2", "Ascendant 3", "Immortal 1", "Immortal 2", "Immortal 3"];

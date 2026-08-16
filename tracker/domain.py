@@ -55,6 +55,18 @@ PANEL_RANK_TO_TIER: dict[str, int] = {
 # Panelde secilebilen rank'lar, sirasiyla (Bronze 1 ... Immortal 3).
 PANEL_RANK_ORDER: list[str] = [r["panel"] for r in RANKS if r["panel"]]
 
+# --- Oyunlar -----------------------------------------------------------------
+
+GAMES: list[dict[str, Any]] = DOMAIN["games"]
+
+# Botun yokladigi oyunlar. Yalnizca Valorant'in maca maca ilerleme veren bir
+# API'si var; digerleri panelde yonetiliyor ama takip edilmiyor.
+TRACKED_GAMES: tuple[str, ...] = tuple(g["id"] for g in GAMES if g["tracked"])
+
+# `resells.game` kolonunun varsayilani. Kolon eklenmeden onceki tum siparisler
+# Valorant oldugu icin migration da bu degeri kullaniyor.
+DEFAULT_GAME: str = GAMES[0]["id"]
+
 # --- Elo aritmetigi ----------------------------------------------------------
 
 # ranks.py bu sabitleri okuyor; panel de ayni degerleri uretilmis dosyadan
@@ -103,6 +115,18 @@ def _validate() -> None:
             raise RuntimeError(f"domain.json: '{s['key']}' bilinmeyen bir duruma gidiyor: '{nxt}'")
     if not PANEL_RANK_ORDER:
         raise RuntimeError("domain.json: panelde secilebilir rank yok.")
+    if not TRACKED_GAMES:
+        raise RuntimeError(
+            "domain.json: takip edilen oyun yok, poll dongusu hicbir siparis bulamazdi."
+        )
+    for g in GAMES:
+        if g["ranks"] is None and not g["tracked"]:
+            raise RuntimeError(
+                f"domain.json: '{g['id']}' takip edilmiyor ama kendi rank listesi yok. "
+                "Valorant disindaki oyunlar tier tablosunu paylasamaz."
+            )
+        if g["ranks"] is not None and len(g["ranks"]) < 2:
+            raise RuntimeError(f"domain.json: '{g['id']}' icin en az iki rank gerekli.")
 
 
 _validate()

@@ -208,3 +208,15 @@ table.matrix td.fiyat{font-size:13px}table.matrix td.dim{color:#33333a;text-alig
   border-radius:7px;padding:3px 8px;min-width:34px;text-align:center;cursor:default}
 
 @media(max-width:560px){.drawer-panel{padding:18px 15px}}
+
+/* ============ OYUN SEÇİMİ ============ */
+.chip.game{font-family:'Oswald',sans-serif;letter-spacing:.6px;
+  border-color:rgba(212,175,55,.3);color:var(--gold);background:rgba(212,175,55,.08)}
+
+.game-tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px}
+.game-tab{background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  color:var(--silver);padding:8px 13px;font-size:12.5px;cursor:pointer;font-family:'Inter',sans-serif}
+.game-tab:hover{border-color:var(--gold-soft)}
+.game-tab.active{background:rgba(212,175,55,.12);border-color:rgba(212,175,55,.45);color:var(--gold)}
+/* Takip botu olmayan oyunlar: sipariş/fiyat yönetimi var, otomatik takip yok */
+.game-tab .no-track{opacity:.5;font-size:11px}
