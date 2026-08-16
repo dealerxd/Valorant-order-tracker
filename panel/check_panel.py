@@ -123,8 +123,14 @@ with sync_playwright() as p:
     check("hedef gecilince oran 1'de kaliyor",
           page.evaluate("eloProgress(900,9999,1100)") == 1)
 
-    check("drawer basta kapali",
-          page.eval_on_selector("#drawer", "el => el.classList.contains('hidden')"))
+    check("drawer basta gercekten gizli",
+          page.eval_on_selector("#drawer", "el => getComputedStyle(el).display") == "none")
+    # Karartma tiklamalari yutmamali: sayfanin ortasindaki eleman drawer
+    # olmamali, yoksa panel kullanilamaz hale gelir.
+    top = page.evaluate(
+        "(() => {const e=document.elementFromPoint(innerWidth/2,innerHeight/2);"
+        " return e ? (e.closest('#drawer') ? 'drawer' : 'sayfa') : 'yok';})()")
+    check("kapali drawer tiklamalari yutmuyor", top == "sayfa", top)
 
     # Drawer'i sahte bir siparisle ac: records/tracker global'lerini doldurup
     # openDetail cagiriyoruz. Supabase saplama oldugu icin mac sorgusu bos doner,
@@ -142,7 +148,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(200)
 
     check("drawer acildi",
-          not page.eval_on_selector("#drawer", "el => el.classList.contains('hidden')"))
+          page.eval_on_selector("#drawer", "el => getComputedStyle(el).display") == "flex")
     body = page.inner_text("#drawerBody")
     check("drawer ilerleme yuzdesi gosteriyor", "%50" in body, body[:200])
     check("drawer baslangic rank'i gosteriyor", "Gold 1" in body, body[:200])
@@ -159,7 +165,11 @@ with sync_playwright() as p:
 
     page.evaluate("closeDetail()")
     check("drawer kapandi",
-          page.eval_on_selector("#drawer", "el => el.classList.contains('hidden')"))
+          page.eval_on_selector("#drawer", "el => getComputedStyle(el).display") == "none")
+    check("kapaninca sayfa yine tiklanabilir",
+          page.evaluate(
+            "(() => {const e=document.elementFromPoint(innerWidth/2,innerHeight/2);"
+            " return !e || !e.closest('#drawer');})()"))
 
     browser.close()
 
