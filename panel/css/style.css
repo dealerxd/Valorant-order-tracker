@@ -169,6 +169,10 @@ table.matrix td.fiyat{font-size:13px}table.matrix td.dim{color:#33333a;text-alig
 .rec-route.open:hover{color:var(--gold)}
 
 .drawer{position:fixed;inset:0;z-index:1500;display:flex;justify-content:flex-end}
+/* .hidden (display:none) bu dosyada DAHA ÖNCE tanımlı ve aynı özgüllükte —
+   tek başına bırakılırsa .drawer'ın display:flex'i onu ezer, drawer hiç
+   kapanmaz: karartma tüm sayfayı kaplar ve tıklamaları yutar. */
+.drawer.hidden{display:none}
 .drawer-scrim{position:absolute;inset:0;background:rgba(6,6,8,.68)}
 .drawer-panel{position:relative;width:540px;max-width:94vw;height:100%;overflow-y:auto;
   background:#101013;border-left:1px solid var(--line);padding:24px;
