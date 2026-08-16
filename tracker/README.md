@@ -85,6 +85,31 @@ https://api.henrikdev.xyz/dashboard/ adresinden alınıyor, Discord üyeliği ge
 Bot her isteği 2 birim sayarak güvenli tarafta kalıyor (HenrikDev cache miss'lerde
 çift sayım yapıyor).
 
+<details>
+<summary><b>Neden HenrikDev? (alternatifler araştırıldı, Ağustos 2026)</b></summary>
+
+Kısa cevap: botun ihtiyacı olan veriyi veren tek kaynak o. Aranan şey **maç
+başına RR değişimi** — seans özeti, rank atlama tespiti ve ilerleme yüzdesi
+hep buna dayanıyor. Güncel rank yeterli değil.
+
+**tracker.gg — olmaz.** Tracker Network'ün resmi API'si Apex, CS2, Division 2
+ve Splitgate destekliyor; Valorant listede yok. TRN'in kendi açıklaması: Riot
+onlara Valorant API erişimi dağıtma yetkisi vermiyor. İnternette "tracker.gg
+API" diye bulunan şeyler siteyi kazıyan üçüncü parti projeler — Cloudflare
+arkasında, ToS'a aykırı, kırılgan. Üstelik verdikleri veri ajan/harita bazlı
+toplu istatistik, maç başına RR deltası değil. Yani ToS sorunu olmasa bile
+botun yarısı çalışmazdı.
+
+**Riot resmi API — olmaz.** Valorant'a yalnızca production key erişiyor,
+personal/dev key erişmiyor. Riot bu key'i seçerek veriyor ve geliştirici
+politikası "MMR/ELO hesaplayıcıları"nı ve sıralama sistemine alternatif
+üretmeyi açıkça yasaklıyor.
+
+Yeni bir sağlayıcı değerlendirirken tek soru şu: **maç maç RR değişimi
+veriyor mu?** Vermiyorsa bu bot için yeterli değil.
+
+</details>
+
 ### 3. Telegram
 
 1. [@BotFather](https://t.me/botfather) → `/newbot` → token'ı `TELEGRAM_BOT_TOKEN`'a yaz
