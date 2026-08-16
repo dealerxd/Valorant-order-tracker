@@ -330,7 +330,7 @@ function render(){
     const shot=r.image?`<div class="rec-shot"><img src="${r.image}" onclick="openLightbox('${r.id}')"></div>`:'';
     return `<div class="rec ${r.archived?'arch':''}">
       <div class="rec-top"><div>
-        <div class="rec-route">${routeHTML(r)}</div>
+        <div class="rec-route open" onclick="openDetail('${r.id}')" title="Detayı aç">${routeHTML(r)}</div>
         <div class="rec-meta" style="margin-top:7px">
           ${r.orderType!=='rank'?`<span class="chip" style="border-color:rgba(90,157,237,.35);color:var(--blue)">🎯 ${ORDER_TYPES[r.orderType]}</span>`:''}
           ${r.archived?`<span class="chip" style="color:var(--amber)">🗄 arşiv</span>`:''}
@@ -341,6 +341,7 @@ function render(){
           ${r.orderType==='rank'&&r.startRR?`<span class="chip">RR ${r.startRR}</span>`:''}
           ${r.orderType==='rank'&&r.region!=='TR'?`<span class="chip">🌍 ${esc(r.region)}</span>`:''}
           ${r.riotId?`<span class="chip" style="border-color:rgba(90,157,237,.35);color:var(--blue)">🎮 ${esc(r.riotId)}</span>`:''}
+          ${trackChip(r)}
           ${r.orderType==='rank'&&r.extraWin?`<span class="chip">➕ Extra Win</span>`:''}
           ${(r.extras||[]).map(k=>`<span class="chip">✚ ${esc(extraLabel(k))}</span>`).join('')}
           ${r.payout>0?`<span class="chip ${r.paid?'paid':'unpaid'}">${r.paid?'✓ ödendi':'● ödenmedi'}</span>`:''}
@@ -352,6 +353,7 @@ function render(){
       <div class="rec-actions">
         ${NEXT_STATUS[r.durum]?`<button class="icon-btn go" onclick="setStatus('${r.id}','${NEXT_STATUS[r.durum]}')">→ ${STATUS_LABEL[NEXT_STATUS[r.durum]]}</button>`:''}
         <button class="icon-btn" onclick="document.getElementById('shot-${r.id}').click()">📷 ${r.image?'Değiştir':'Görsel'}</button>
+        <button class="icon-btn" onclick="openDetail('${r.id}')">🔍 Detay</button>
         <button class="icon-btn" onclick="editRecord('${r.id}')">✎ Düzenle</button>
         ${isAdmin()&&r.payout>0?`<button class="icon-btn" onclick="togglePaid('${r.id}',${!r.paid})">${r.paid?'↺ Ödeme geri':'💰 Ödendi'}</button>`:''}
         ${isAdmin()?`<button class="icon-btn" onclick="toggleArchive('${r.id}',${!r.archived})">${r.archived?'↩ Arşivden çıkar':'🗄 Arşivle'}</button>`:''}

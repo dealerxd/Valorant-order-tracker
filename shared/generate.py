@@ -54,6 +54,11 @@ def render(domain: dict) -> str:
     next_status = {s["key"]: s["next"] for s in statuses if s["next"]}
     form_statuses = [s["key"] for s in statuses if s["form"]]
 
+    elo = domain["elo"]
+    # tier ID -> gosterilecek isim. Panel `tracker_matches.tier_id` ve
+    # `tracker_state.current_elo` alanlarini rank adina cevirmek icin kullaniyor.
+    tier_name = {r["tier"]: (r["panel"] or r["api"]) for r in ranks}
+
     lines = [
         HEADER,
         "/* Tablo isimleri (tracker ayni dosyadan okuyor) */",
@@ -82,6 +87,32 @@ def render(domain: dict) -> str:
         "    sel.value = REGION_VALUES.includes(keep) ? keep : REGION_VALUES[0];",
         "  });",
         "}",
+        "",
+        "/* ---- Elo aritmetigi (takip drawer'i icin) ----",
+        "   Sabitler shared/domain.json'dan; tracker/ranks.py ayni degerleri okuyor. */",
+        f"const ELO = {_js(elo)};",
+        f"const TIER_NAME = {_js(tier_name)};",
+        "",
+        "/* elo -> {tier, rr, label}. Immortal ve ustunde RR tier icinden degil",
+        "   Immortal 1 tabanindan kumulatif sayilir - ranks.py ile ayni kural. */",
+        "function rankFromElo(elo){",
+        "  if(elo==null) return null;",
+        "  if(elo < 0) elo = 0;",
+        "  const immortalBase = (ELO.immortal_start_tier - ELO.lowest_ranked_tier) * ELO.tier_width;",
+        "  const tier = Math.min(ELO.radiant_tier, ELO.lowest_ranked_tier + Math.floor(elo / ELO.tier_width));",
+        "  const rr = tier >= ELO.immortal_start_tier ? elo - immortalBase : elo % ELO.tier_width;",
+        "  return { tier, rr, label: TIER_NAME[tier] || ('Tier ' + tier) };",
+        "}",
+        "",
+        "/* Hedefe ilerleme orani (0-1). Hedef baslangica esitse tam kabul edilir. */",
+        "function eloProgress(startElo, currentElo, targetElo){",
+        "  const span = targetElo - startElo;",
+        "  if(!(span > 0)) return 1;",
+        "  return Math.max(0, Math.min(1, (currentElo - startElo) / span));",
+        "}",
+        "",
+        "/* Immortal 3'un ustunde siralama leaderboard'a bagli, yuzde yaklasiktir. */",
+        "const eloProgressReliable = tier => tier == null || tier <= ELO.progress_unreliable_above;",
         "",
         "/* Durum <select>'ini doldurur (formda secilebilir olanlar). */",
         "function fillStatusSelects(){",

@@ -16,17 +16,20 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from domain import PANEL_RANK_TO_TIER, TIERS  # noqa: F401  (TIERS disariya aciliyor)
+from domain import ELO, PANEL_RANK_TO_TIER, TIERS  # noqa: F401  (TIERS disariya aciliyor)
 
-LOWEST_RANKED_TIER = 3
-IMMORTAL_START_TIER = 24  # Immortal 1
-RADIANT_TIER = 27
+# Sabitler shared/domain.json'dan geliyor; panelin ilerleme cubugu da ayni
+# degerleri okuyor (bkz. panel/js/domain.generated.js -> rankFromElo).
+LOWEST_RANKED_TIER = ELO["lowest_ranked_tier"]
+IMMORTAL_START_TIER = ELO["immortal_start_tier"]  # Immortal 1
+RADIANT_TIER = ELO["radiant_tier"]
+TIER_WIDTH = ELO["tier_width"]
 
 # Bu tier'in ustunde ilerleme yuzdesi leaderboard'a bagli oldugu icin guvenilmez.
-PROGRESS_UNRELIABLE_ABOVE = 26
+PROGRESS_UNRELIABLE_ABOVE = ELO["progress_unreliable_above"]
 
 # Immortal 1 esigi. Immortal ve ustunde RR tier icinden degil buradan sayiliyor.
-IMMORTAL_BASE_ELO = (IMMORTAL_START_TIER - LOWEST_RANKED_TIER) * 100  # 2100
+IMMORTAL_BASE_ELO = (IMMORTAL_START_TIER - LOWEST_RANKED_TIER) * TIER_WIDTH  # 2100
 
 # Rank gruplarinin Turkce ve kisa yazimlari. parse_rank bunlari cozuyor.
 _GROUP_ALIASES: dict[str, int] = {
@@ -92,7 +95,7 @@ def tier_threshold_elo(tier_id: int) -> int:
     """
     if tier_id < LOWEST_RANKED_TIER:
         return 0
-    return (tier_id - LOWEST_RANKED_TIER) * 100
+    return (tier_id - LOWEST_RANKED_TIER) * TIER_WIDTH
 
 
 def elo_from(tier_id: int, rr: int) -> int:
@@ -116,10 +119,10 @@ def tier_from_elo(elo: int) -> tuple[int, int]:
     """
     if elo < 0:
         return LOWEST_RANKED_TIER, 0
-    tier_id = min(RADIANT_TIER, LOWEST_RANKED_TIER + elo // 100)
+    tier_id = min(RADIANT_TIER, LOWEST_RANKED_TIER + elo // TIER_WIDTH)
     if tier_id >= IMMORTAL_START_TIER:
         return tier_id, elo - IMMORTAL_BASE_ELO
-    return tier_id, elo % 100
+    return tier_id, elo % TIER_WIDTH
 
 
 def tier_name(tier_id: int | None) -> str:
