@@ -59,6 +59,8 @@
       <h2><span class="bar"></span><span id="formTitle">Yeni Sipariş</span></h2>
 
       <div class="two">
+        <div class="field"><label>Oyun</label>
+          <select id="gameSel" onchange="onGameChange()"></select></div>
         <div class="field"><label>İşlem Türü</label>
           <select id="orderType" onchange="onTypeChange()">
             <option value="rank">Rank Boost</option>
@@ -91,7 +93,7 @@
           <div class="field"><label>Başlangıç RR</label><input type="number" id="startRR" min="0" max="99" value="0" oninput="onRankChange()"></div>
           <div class="field"><label>Bölge</label><select id="region" data-region onchange="onRankChange()"></select></div>
         </div>
-        <div class="field"><label>Riot ID <span style="opacity:.55;font-weight:400">— takip botu için, boş bırakılabilir</span></label>
+        <div class="field" id="riotIdField"><label>Riot ID <span style="opacity:.55;font-weight:400">— takip botu için, boş bırakılabilir</span></label>
           <input type="text" id="riotId" placeholder="isim#tag" autocomplete="off"></div>
         <div class="toggles" style="margin:2px 0 12px">
           <label class="tg"><input type="checkbox" id="extraWin" onchange="onRankChange()"><span class="sw"></span>Extra Win <b>+1 win (hedef rankta)</b></label>
@@ -147,6 +149,7 @@
     <div>
       <div class="toolbar">
         <input class="search" type="text" id="search" placeholder="🔍 Ara" oninput="render()">
+        <select id="filterGame" onchange="render()"></select>
         <select id="filterDurum" onchange="render()"><option value="">Tüm Durumlar</option>
           <option value="yeni">Yeni</option><option value="atandi">Atandı</option><option value="devam">Devam</option>
           <option value="tamam">Tamamlandı</option></select>

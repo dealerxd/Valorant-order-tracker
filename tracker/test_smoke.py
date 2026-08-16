@@ -48,6 +48,7 @@ class FakeStore:
             "id": order_id, "handle": store_mod.handle_of(order_id),
             "riot_id": "Boost#TR1", "name": "Boost", "tag": "TR1",
             "panel_region": "TR", "durum": "devam", "order_type": "rank",
+            "game": store_mod.DEFAULT_GAME,
             "baslangic": "Gold 1", "hedef": "Gold 3", "note": None,
             "booster_id": None, "archived": False, "created_at": iso(600),
             "tracked": True, "puuid": f"puuid-{order_id}", "region": "eu",
@@ -62,9 +63,13 @@ class FakeStore:
         self.matches.setdefault(order_id, [])
         return base
 
+    def _tracked_game(self, o: dict) -> bool:
+        """Gercek sorgudaki `game=in.(...)` filtresinin karsiligi."""
+        return o["game"] in store_mod.TRACKED_GAMES
+
     async def list_pending_links(self) -> list[dict]:
         return [dict(o) for o in self.orders.values()
-                if not o["tracked"] and o["riot_id"]
+                if not o["tracked"] and o["riot_id"] and self._tracked_game(o)
                 and o["durum"] in store_mod.ACTIVE_STATUSES and not o["archived"]]
 
     async def set_riot_id(self, order_id: str, riot_id) -> None:
@@ -72,11 +77,12 @@ class FakeStore:
 
     async def list_trackable(self) -> list[dict]:
         return [dict(o) for o in self.orders.values()
-                if o["tracked"] and not o["paused"] and o["durum"] in store_mod.ACTIVE_STATUSES]
+                if o["tracked"] and not o["paused"] and self._tracked_game(o)
+                and o["durum"] in store_mod.ACTIVE_STATUSES]
 
     async def list_orders(self, *, only_tracked: bool = False) -> list[dict]:
         rows = [dict(o) for o in self.orders.values()
-                if o["durum"] in store_mod.LISTABLE_STATUSES]
+                if o["durum"] in store_mod.LISTABLE_STATUSES and self._tracked_game(o)]
         return [o for o in rows if o["tracked"]] if only_tracked else rows
 
     async def get_order(self, handle: str) -> dict | None:
@@ -591,6 +597,36 @@ def test_shared_contract() -> None:
     # store.py'nin kullandigi tablo isimleri sozlesmeden gelmeli.
     check("tablo isimleri sozlesmeden", domain.ORDERS_TABLE == raw["tables"]["orders"])
 
+    # --- Oyunlar ---------------------------------------------------------
+    # Bot yalnizca Valorant'i takip edebiliyor; digerlerinin mac basina
+    # ilerleme veren API'si yok. Filtre kayarsa bot bir Rocket League
+    # siparisinin "Grand Champion II" hedefini Valorant rank'i sanip her turda
+    # hata uretir.
+    check("yalnizca valorant takip ediliyor", domain.TRACKED_GAMES == ("valorant",),
+          str(domain.TRACKED_GAMES))
+    check("varsayilan oyun valorant", domain.DEFAULT_GAME == "valorant")
+    check("poll sorgusu oyuna gore suzuyor",
+          "valorant" in store_mod._TRACKED_GAME_FILTER)
+
+    game_ids = [g["id"] for g in raw["games"]]
+    check("oyun id'leri benzersiz", len(game_ids) == len(set(game_ids)), str(game_ids))
+
+    for g in raw["games"]:
+        ladder = domain.PANEL_RANK_ORDER if g["ranks"] is None else g["ranks"]
+        check(f"{g['id']}: rank listesi benzersiz",
+              len(ladder) == len(set(ladder)),
+              str([r for r in ladder if ladder.count(r) > 1][:3]))
+
+    # Rank isimleri oyunlar arasinda ORTUSUYOR ve bu kacinilmaz: OW2'nin
+    # "Bronze 3"u ile Valorant'in "Bronze 3"u ayni yaziliyor, anlamlari farkli
+    # (OW2'de bolumler 5'ten 1'e iner). Yani parse_rank etikete bakarak oyunu
+    # ayirt EDEMEZ - koruma etiket duzeyinde degil, sorgu duzeyinde: bot
+    # takip edilmeyen oyunlarin siparisini hic gormuyor.
+    # Bunun davranissal karsiligi test_game_filter() icinde.
+    ortusen = {r for g in raw["games"] if g["ranks"] for r in g["ranks"]} & set(domain.PANEL_RANK_ORDER)
+    check(f"rank isimleri oyunlar arasi ortusuyor ({len(ortusen)} etiket) - filtre sart",
+          bool(ortusen))
+
     # Elo -> rank formulu iki dilde ayri yazili (ranks.py ve panelin
     # rankFromElo'su). Sabitler ortak ama formuller degil - biri digerinden
     # ayrilirsa panel musteriye botun soyledigi rank'tan baskasini gosterir.
@@ -619,8 +655,55 @@ def test_shared_contract() -> None:
           not mismatches, "; ".join(mismatches[:4]))
 
 
+async def test_game_filter() -> None:
+    """Takip edilmeyen oyunlarin siparisi bota hic ulasmamali.
+
+    Panel artik Rocket League, OW2, Marvel Rivals ve Wild Rift siparisi de
+    tutuyor. Bunlarin rank etiketleri Valorant'inkilerle ortusebiliyor
+    ('Bronze 3' iki oyunda da var), o yuzden koruma etiketi ayristirmak degil
+    siparisi hic almamak. Filtre kayarsa bot bir RL siparisini Valorant sanip
+    hedefi yanlis hesaplar ya da her turda hata uretir.
+    """
+    print("\n[oyun filtresi]")
+    store = FakeStore()
+
+    store.add_order("aaaaaaaa-0000-0000-0000-000000000000", game="valorant")
+    # Takibi bekleyen bir RL siparisi: riot_id dolu, henuz baglanmamis.
+    store.add_order("bbbbbbbb-0000-0000-0000-000000000000", game="rl",
+                    tracked=False, riot_id="Boostcu#RL1",
+                    baslangic="Champion I", hedef="Grand Champion II")
+    # Takip ediliyor gorunen bir OW2 siparisi (elle yazilmis bir tracker_state).
+    store.add_order("cccccccc-0000-0000-0000-000000000000", game="ow2",
+                    baslangic="Platinum 3", hedef="Diamond 1")
+
+    trackable = await store.list_trackable()
+    check("yoklama yalnizca valorant aliyor",
+          [o["id"][:8] for o in trackable] == ["aaaaaaaa"],
+          str([(o["id"][:8], o["game"]) for o in trackable]))
+
+    pending = await store.list_pending_links()
+    check("otomatik baglama RL siparisini almiyor", pending == [],
+          str([(o["id"][:8], o["game"]) for o in pending]))
+
+    listed = await store.list_orders()
+    check("/liste takip disi oyunlari gostermiyor",
+          all(o["game"] in store_mod.TRACKED_GAMES for o in listed),
+          str([(o["id"][:8], o["game"]) for o in listed]))
+
+    # Poll turu RL/OW2 siparisleri yuzunden patlamamali.
+    henrik_fake = FakeHenrik()
+    henrik_fake.entries = [make_entry("m1", 20, 920, 5)]
+    sender = FakeSender()
+    dispatcher = Dispatcher()
+    dispatcher.register_telegram(sender, "OPS")
+    tracker_obj = Tracker(make_config(), henrik_fake, store, dispatcher)
+    await tracker_obj.poll_once()
+    check("poll turu takip disi siparislerle sorunsuz gecti", True)
+
+
 def main() -> int:
     test_shared_contract()
+    asyncio.run(test_game_filter())
     test_ranks()
     test_store_helpers()
     asyncio.run(test_webhook_mode())

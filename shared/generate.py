@@ -59,10 +59,31 @@ def render(domain: dict) -> str:
     # `tracker_state.current_elo` alanlarini rank adina cevirmek icin kullaniyor.
     tier_name = {r["tier"]: (r["panel"] or r["api"]) for r in ranks}
 
+    # Oyun -> satilabilir rank merdiveni. Valorant'inki ayri `ranks` tablosundan
+    # geliyor (tier ID'leri var), digerleri duz etiket listesi.
+    games = domain["games"]
+    game_ranks = {
+        g["id"]: (panel_ranks if g["ranks"] is None else g["ranks"]) for g in games
+    }
+    game_meta = [
+        {"id": g["id"], "label": g["label"], "short": g["short"], "tracked": g["tracked"]}
+        for g in games
+    ]
+
     lines = [
         HEADER,
         "/* Tablo isimleri (tracker ayni dosyadan okuyor) */",
         f"const TABLES = {_js(tables)};",
+        "",
+        "/* ---- Oyunlar ---- */",
+        "/* tracked=false olanlarin takip botu yok; panel yine de siparis, fiyat",
+        "   ve booster yonetimi yapiyor. Bkz. shared/domain.json */",
+        f"const GAMES = {_js(game_meta)};",
+        f"const GAME_RANKS = {_js(game_ranks)};",
+        f"const DEFAULT_GAME = {_js(games[0]['id'])};",
+        "const gameOf = id => GAMES.find(g => g.id === id) || GAMES[0];",
+        "const ranksOfGame = id => GAME_RANKS[id] || GAME_RANKS[DEFAULT_GAME];",
+        "const isTrackedGame = id => gameOf(id).tracked;",
         "",
         "/* Panelde secilebilen rank'lar, dusukten yuksege.",
         "   Iron ve Radiant bilincli olarak yok - bkz. shared/domain.json */",

@@ -1,9 +1,40 @@
 /* ============ SİPARİŞ FORMU ============ */
+/* Oyun <select>'i: rank listeleri ve Riot ID alanı buna bağlı. */
+function fillGameSelects(){
+  const f=document.getElementById('gameSel'), flt=document.getElementById('filterGame');
+  if(f && !f.options.length) GAMES.forEach(g=>f.add(new Option(g.label,g.id)));
+  if(flt && !flt.options.length){
+    flt.add(new Option('Tüm oyunlar',''));
+    GAMES.forEach(g=>flt.add(new Option(g.label,g.id)));
+  }
+}
+
+/* Oyun değişince rank listeleri yenilenir ve takip alanı gizlenir/görünür.
+   Riot ID yalnızca takip edilen oyunlarda anlamlı — Rocket League siparişine
+   nick girmek boşuna, bot o siparişi yoklamıyor. */
+function onGameChange(){
+  const sel=document.getElementById('gameSel');
+  currentGame = sel ? sel.value : DEFAULT_GAME;
+  fillRankSelects();
+  const tracked=isTrackedGame(currentGame);
+  const rf=document.getElementById('riotIdField');
+  if(rf) rf.classList.toggle('hidden',!tracked);
+  if(!tracked){ const ri=document.getElementById('riotId'); if(ri) ri.value=''; }
+  onRankChange();
+}
+
 function fillRankSelects(){
   const b=document.getElementById('baslangic'),h=document.getElementById('hedef'),u=document.getElementById('unitRank');
-  if(!b) return; b.innerHTML='';h.innerHTML='';u.innerHTML='';
-  RANK_ORDER.forEach(r=>{b.add(new Option(r,r));h.add(new Option(r,r));u.add(new Option(r,r));});
-  b.value='Gold 1';h.value='Diamond 1';u.value='Gold 1';
+  if(!b) return;
+  const ORDER=ranksOfGame(currentGame);
+  const keep={b:b.value,h:h.value,u:u.value};
+  b.innerHTML='';h.innerHTML='';u.innerHTML='';
+  ORDER.forEach(r=>{b.add(new Option(r,r));h.add(new Option(r,r));u.add(new Option(r,r));});
+  // Oyun değişince eski seçim listede olmayabilir; oranla makul bir yere düş.
+  const at=f=>ORDER[Math.min(ORDER.length-1,Math.floor(ORDER.length*f))];
+  b.value=ORDER.includes(keep.b)?keep.b:at(0.3);
+  h.value=ORDER.includes(keep.h)?keep.h:at(0.6);
+  u.value=ORDER.includes(keep.u)?keep.u:at(0.3);
 }
 function fillBoosterSelects(){
   const sel=document.getElementById('boosterSel'),flt=document.getElementById('filterBooster');
@@ -122,6 +153,7 @@ async function saveRecord(){
   const netGelirTL = Math.round(costTL*(1-feePct/100));
 
   const row={
+    game:document.getElementById('gameSel').value||DEFAULT_GAME,
     order_type:type,
     baslangic:null, hedef:null, start_rr:0, region:'TR', riot_id:null,
     extras:type==='custom'?[]:formSelectedExtras(),
@@ -137,7 +169,7 @@ async function saveRecord(){
     row.hedef=document.getElementById('hedef').value;
     row.start_rr=Number(document.getElementById('startRR').value)||0;
     row.region=document.getElementById('region').value;
-    const rid=document.getElementById('riotId').value.trim();
+    const rid=isTrackedGame(row.game) ? document.getElementById('riotId').value.trim() : '';
     if(rid && !/^[^#]+#[^#]+$/.test(rid)){ alert('Riot ID "isim#tag" formatında olmalı. Örnek: Player#TR1'); return; }
     row.riot_id=rid||null;
   } else if(type==='netwin'||type==='placement'){
@@ -175,10 +207,12 @@ async function saveRecord(){
 }
 function editRecord(id){
   const r=records.find(x=>x.id===id); if(!r)return; editId=id; const f=F(id);
+  document.getElementById('gameSel').value=r.game||DEFAULT_GAME;
+  onGameChange();                       // rank listelerini bu oyuna gore doldur
   document.getElementById('orderType').value=r.orderType||'rank';
   document.getElementById('boosterSel').value=r.boosterId||'';
   if(r.orderType==='netwin'||r.orderType==='placement'){
-    document.getElementById('unitRank').value=r.baslangic||'Gold 1';
+    document.getElementById('unitRank').value=r.baslangic||ranksOfGame(r.game)[0];
     document.getElementById('unitCount').value=r.winCount||1;
   } else if(r.orderType==='custom'){
     document.getElementById('jobDesc').value=r.jobDesc||'';
@@ -214,6 +248,7 @@ function resetForm(){
   document.getElementById('platform').value='';document.getElementById('feePct').value='0';
   document.getElementById('currency').value='USD';document.getElementById('payout').dataset.manual='';
   document.getElementById('boosterSel').value='';
+  const gs=document.getElementById('gameSel'); if(gs){ gs.value=DEFAULT_GAME; onGameChange(); }
   document.getElementById('durum').value=(me&&!isAdmin())?'atandi':'yeni';   // booster'ın girdiği iş zaten ona atanmış
   document.getElementById('startRR').value='0';document.getElementById('region').value='TR';
   document.getElementById('extraWin').checked=false;
@@ -306,16 +341,18 @@ function renderStats(){
 function render(){
   renderStats();
   const q=(document.getElementById('search').value||'').toLowerCase();
+  const fg=(document.getElementById('filterGame')||{}).value||'';
   const fd=document.getElementById('filterDurum').value;
   const fb=document.getElementById('filterBooster').value;
   const fa=document.getElementById('filterArchive').value;
   let list=records.filter(r=>{
     if(fa==='active'&&r.archived) return false;
     if(fa==='arch'&&!r.archived) return false;
+    if(fg&&r.game!==fg) return false;
     if(fd&&r.durum!==fd) return false;
     if(fb&&r.boosterId!==fb) return false;
     if(!q) return true;
-    return [r.baslangic,r.hedef,r.jobDesc,ORDER_TYPES[r.orderType],r.not,r.riotId,nameOf(r.boosterId)].join(' ').toLowerCase().includes(q);
+    return [r.baslangic,r.hedef,r.jobDesc,ORDER_TYPES[r.orderType],gameOf(r.game).label,r.not,r.riotId,nameOf(r.boosterId)].join(' ').toLowerCase().includes(q);
   });
   const el=document.getElementById('recordList');
   if(!list.length){ el.innerHTML=`<div class="empty"><div class="big">${records.length?'Sonuç yok':'Henüz iş yok'}</div>
@@ -332,6 +369,7 @@ function render(){
       <div class="rec-top"><div>
         <div class="rec-route open" onclick="openDetail('${r.id}')" title="Detayı aç">${routeHTML(r)}</div>
         <div class="rec-meta" style="margin-top:7px">
+          <span class="chip game">${esc(gameOf(r.game).short)}</span>
           ${r.orderType!=='rank'?`<span class="chip" style="border-color:rgba(90,157,237,.35);color:var(--blue)">🎯 ${ORDER_TYPES[r.orderType]}</span>`:''}
           ${r.archived?`<span class="chip" style="color:var(--amber)">🗄 arşiv</span>`:''}
           ${isAdmin()&&f.platform?`<span class="chip" style="border-color:rgba(212,175,55,.3);color:var(--gold)">🛒 ${esc(f.platform)}${refHTML(f.platformRef)}</span>`:''}
