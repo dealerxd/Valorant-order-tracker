@@ -16,19 +16,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-# Valorant tier ID -> Ingilizce isim
-TIERS: dict[int, str] = {
-    0: "Unranked",
-    3: "Iron 1", 4: "Iron 2", 5: "Iron 3",
-    6: "Bronze 1", 7: "Bronze 2", 8: "Bronze 3",
-    9: "Silver 1", 10: "Silver 2", 11: "Silver 3",
-    12: "Gold 1", 13: "Gold 2", 14: "Gold 3",
-    15: "Platinum 1", 16: "Platinum 2", 17: "Platinum 3",
-    18: "Diamond 1", 19: "Diamond 2", 20: "Diamond 3",
-    21: "Ascendant 1", 22: "Ascendant 2", 23: "Ascendant 3",
-    24: "Immortal 1", 25: "Immortal 2", 26: "Immortal 3",
-    27: "Radiant",
-}
+from domain import PANEL_RANK_TO_TIER, TIERS  # noqa: F401  (TIERS disariya aciliyor)
 
 LOWEST_RANKED_TIER = 3
 IMMORTAL_START_TIER = 24  # Immortal 1
@@ -63,7 +51,18 @@ def _normalize(text: str) -> str:
 
 
 def parse_rank(text: str) -> int | None:
-    """'Altın 2', 'gold 2', 'g2', 'Radiant' gibi girdileri tier ID'ye cevirir."""
+    """'Altın 2', 'gold 2', 'g2', 'Radiant' gibi girdileri tier ID'ye cevirir.
+
+    Panelin yazdigi etiketler ('Plat 1' gibi) once shared/domain.json'daki
+    kesin tablodan cozuluyor; asagidaki esnek ayristirma yalnizca komuta elle
+    yazilan girdiler icin. Panel etiketini tahmine birakmiyoruz - panel 'Plat'
+    yazip API 'Platinum' donduruyor, arada bir kisaltma eslesmesine guvenmek
+    yeni bir rank eklendiginde sessizce kirilir.
+    """
+    exact = PANEL_RANK_TO_TIER.get(text.strip())
+    if exact is not None:
+        return exact
+
     norm = _normalize(text)
     norm = re.sub(r"[^a-z0-9]+", " ", norm).strip()
     if not norm:

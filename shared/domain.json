@@ -1,0 +1,109 @@
+{
+  "_": [
+    "Panel ile tracker arasindaki ORTAK SOZLESME. Tek kaynak burasi.",
+    "",
+    "Panel siparisi acar ve `resells` tablosuna yazar; tracker ayni satiri okur.",
+    "Rank etiketleri, bolge kodlari ve durum degerleri iki tarafta da ayni olmak",
+    "zorunda - biri degisip digeri degismezse tracker sessizce yoklamayi keser.",
+    "Ayri depolardayken bu listeler iki (bolgede uc) yerde elle tutuluyordu.",
+    "",
+    "Degistirdikten sonra `python shared/generate.py` calistir; panelin okudugu",
+    "panel/js/domain.generated.js yeniden uretilir. test_smoke.py senkron olup",
+    "olmadigini kontrol eder."
+  ],
+
+  "tables": {
+    "orders": "resells",
+    "state": "tracker_state",
+    "matches": "tracker_matches"
+  },
+
+  "_ranks": [
+    "tier    : Valorant tier ID (HenrikDev ile ayni). elo = (tier - 3) * 100 + rr",
+    "api     : HenrikDev'in dondurdugu Ingilizce isim",
+    "panel   : panelin gosterdigi ve `resells.baslangic` / `resells.hedef`",
+    "          alanlarina YAZDIGI etiket. null ise panelde secilemez.",
+    "",
+    "Panelde Iron ve Radiant yok: musteriye bu araliklar satilmiyor. Tracker",
+    "ikisini de destekler (hesap Iron'dan baslayabilir, hedef Radiant olabilir),",
+    "sadece panel formunda secenek olarak cikmaz.",
+    "",
+    "'Plat 1' vs 'Platinum 1' farki bilincli: panel kisa etiketi gosteriyor.",
+    "Tracker eslesmeyi bu tablodan yapar, isim tahminine dayanmaz."
+  ],
+  "ranks": [
+    { "tier": 0,  "api": "Unranked",    "panel": null },
+    { "tier": 3,  "api": "Iron 1",      "panel": null },
+    { "tier": 4,  "api": "Iron 2",      "panel": null },
+    { "tier": 5,  "api": "Iron 3",      "panel": null },
+    { "tier": 6,  "api": "Bronze 1",    "panel": "Bronze 1" },
+    { "tier": 7,  "api": "Bronze 2",    "panel": "Bronze 2" },
+    { "tier": 8,  "api": "Bronze 3",    "panel": "Bronze 3" },
+    { "tier": 9,  "api": "Silver 1",    "panel": "Silver 1" },
+    { "tier": 10, "api": "Silver 2",    "panel": "Silver 2" },
+    { "tier": 11, "api": "Silver 3",    "panel": "Silver 3" },
+    { "tier": 12, "api": "Gold 1",      "panel": "Gold 1" },
+    { "tier": 13, "api": "Gold 2",      "panel": "Gold 2" },
+    { "tier": 14, "api": "Gold 3",      "panel": "Gold 3" },
+    { "tier": 15, "api": "Platinum 1",  "panel": "Plat 1" },
+    { "tier": 16, "api": "Platinum 2",  "panel": "Plat 2" },
+    { "tier": 17, "api": "Platinum 3",  "panel": "Plat 3" },
+    { "tier": 18, "api": "Diamond 1",   "panel": "Diamond 1" },
+    { "tier": 19, "api": "Diamond 2",   "panel": "Diamond 2" },
+    { "tier": 20, "api": "Diamond 3",   "panel": "Diamond 3" },
+    { "tier": 21, "api": "Ascendant 1", "panel": "Ascendant 1" },
+    { "tier": 22, "api": "Ascendant 2", "panel": "Ascendant 2" },
+    { "tier": 23, "api": "Ascendant 3", "panel": "Ascendant 3" },
+    { "tier": 24, "api": "Immortal 1",  "panel": "Immortal 1" },
+    { "tier": 25, "api": "Immortal 2",  "panel": "Immortal 2" },
+    { "tier": 26, "api": "Immortal 3",  "panel": "Immortal 3" },
+    { "tier": 27, "api": "Radiant",     "panel": null }
+  ],
+
+  "_regions": [
+    "panel : `resells.region` alanindaki deger",
+    "api   : HenrikDev bolge kodu",
+    "mult  : panel fiyat carpani (tracker kullanmaz)",
+    "form  : panel formunda secenek olarak cikar mi",
+    "",
+    "Turkiye Valorant'ta EU sunucularinda oynuyor, o yuzden TR -> eu.",
+    "'Diger' de eu'ya dusuyor: musterilerin ezici cogunlugu EU'da.",
+    "",
+    "form=false olanlar panelde secilemez ama tracker yine de cozer. Elle",
+    "duzenlenmis ya da ileride panele eklenecek bir satir 'eu'ya dusup",
+    "sessizce yanlis bolgeden veri cekmesin diye burada duruyorlar."
+  ],
+  "regions": [
+    { "panel": "TR",    "api": "eu",    "mult": 1.0,  "form": true  },
+    { "panel": "EU",    "api": "eu",    "mult": 1.0,  "form": true  },
+    { "panel": "NA",    "api": "na",    "mult": 1.05, "form": true  },
+    { "panel": "Diğer", "api": "eu",    "mult": 1.1,  "form": true  },
+    { "panel": "AP",    "api": "ap",    "mult": 1.1,  "form": false },
+    { "panel": "KR",    "api": "kr",    "mult": 1.1,  "form": false },
+    { "panel": "LATAM", "api": "latam", "mult": 1.1,  "form": false },
+    { "panel": "BR",    "api": "br",    "mult": 1.1,  "form": false }
+  ],
+
+  "_statuses": [
+    "key      : `resells.durum` alanindaki deger",
+    "label    : panelde gorunen isim",
+    "next     : panelde '->' butonunun tasidigi durum (null ise akis biter)",
+    "form     : panel siparis formunda secilebilir mi",
+    "listable : tracker /liste ve /bagla'da gosterir mi",
+    "polled   : tracker poll dongusunde yoklar mi",
+    "",
+    "'yeni' listelenir ama YOKLANMAZ: is henuz kimseye atanmadigi icin",
+    "oynanmiyor, yoklansa 24 saat sonra bos yere 'takilma' uyarisi uretirdi.",
+    "Yine de listelenir ki siparisi atanmadan once hesaba baglayabilesin.",
+    "",
+    "'odendi' eski kayitlar icin duruyor; formda secenek degil. Odeme artik",
+    "ayri bir `paid` bayragiyla takip ediliyor."
+  ],
+  "statuses": [
+    { "key": "yeni",   "label": "Yeni",   "next": "atandi", "form": true,  "listable": true,  "polled": false },
+    { "key": "atandi", "label": "Atandı", "next": "devam",  "form": true,  "listable": true,  "polled": true  },
+    { "key": "devam",  "label": "Devam",  "next": "tamam",  "form": true,  "listable": true,  "polled": true  },
+    { "key": "tamam",  "label": "Tamam",  "next": null,     "form": true,  "listable": false, "polled": false },
+    { "key": "odendi", "label": "Ödendi", "next": null,     "form": false, "listable": false, "polled": false }
+  ]
+}
