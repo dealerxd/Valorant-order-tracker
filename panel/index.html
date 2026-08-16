@@ -89,8 +89,7 @@
         </div>
         <div class="two">
           <div class="field"><label>Başlangıç RR</label><input type="number" id="startRR" min="0" max="99" value="0" oninput="onRankChange()"></div>
-          <div class="field"><label>Bölge</label><select id="region" onchange="onRankChange()">
-            <option value="TR">TR</option><option value="EU">EU</option><option value="NA">NA</option><option value="Diğer">Diğer</option></select></div>
+          <div class="field"><label>Bölge</label><select id="region" data-region onchange="onRankChange()"></select></div>
         </div>
         <div class="field"><label>Riot ID <span style="opacity:.55;font-weight:400">— takip botu için, boş bırakılabilir</span></label>
           <input type="text" id="riotId" placeholder="isim#tag" autocomplete="off"></div>
@@ -132,9 +131,7 @@
       <div class="suggest" id="suggest"></div>
       <div class="money admin-only" id="moneyBox"></div>
       <div class="two">
-        <div class="field"><label>Durum</label><select id="durum" onchange="toggleImageField()">
-          <option value="yeni">Yeni</option><option value="atandi">Atandı</option><option value="devam">Devam</option>
-          <option value="tamam">Tamamlandı</option></select></div>
+        <div class="field"><label>Durum</label><select id="durum" data-status onchange="toggleImageField()"></select></div>
         <div class="field"><label>Tarih</label><input type="date" id="tarih"></div>
       </div>
       <div class="field hidden" id="imageField"><label>Bitiş Ekran Görüntüsü</label>
@@ -211,8 +208,7 @@
       <div class="field"><label>To</label><select id="cTo" onchange="calcRender()"></select></div>
     </div>
     <div class="two">
-      <div class="field"><label>Bölge</label><select id="cRegion" onchange="calcRender()">
-        <option value="TR">TR</option><option value="EU">EU</option><option value="NA">NA</option><option value="Diğer">Diğer</option></select></div>
+      <div class="field"><label>Bölge</label><select id="cRegion" data-region onchange="calcRender()"></select></div>
       <div class="field"><label>Başlangıç RR</label><input type="number" id="cRR" min="0" max="99" value="0" oninput="calcRender()"></div>
     </div>
     <div class="extra-pills" style="margin-bottom:10px" id="calcExtras"></div>
@@ -246,6 +242,7 @@
   <div class="lightbox hidden" id="lightbox" onclick="closeLightbox()"><img id="lightboxImg" alt=""></div>
 </div>
 
+<script src="js/domain.generated.js"></script>
 <script src="js/config.js"></script>
 <script src="js/pricing.js"></script>
 <script src="js/auth.js"></script>

@@ -27,5 +27,8 @@ function applyRoleUI(){
 }
 
 /* Başlat */
+/* Bölge ve durum seçenekleri HTML'de gömülü değil — shared/domain.json'dan
+   üretiliyor. resetForm() bu alanlara değer atadığı için önce doldurulmalı. */
+fillRegionSelects(); fillStatusSelects();
 resetForm();
 sb.auth.getSession().then(({data:{session}})=>{ if(session) afterLogin(); else showAuth(); });

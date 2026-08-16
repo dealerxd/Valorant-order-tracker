@@ -163,8 +163,8 @@ async function saveRecord(){
   const btn=document.getElementById('saveBtn');btn.disabled=true;
   try{
     let id=editId;
-    if(editId){ const {error}=await sb.from('resells').update(row).eq('id',editId); if(error)throw error; }
-    else { const {data,error}=await sb.from('resells').insert(row).select('id').single(); if(error)throw error; id=data.id; }
+    if(editId){ const {error}=await sb.from(TABLES.orders).update(row).eq('id',editId); if(error)throw error; }
+    else { const {data,error}=await sb.from(TABLES.orders).insert(row).select('id').single(); if(error)throw error; id=data.id; }
     if(isAd){
       if(cost>0){ const {error:fe}=await sb.from('order_finance').upsert(Object.assign({order_id:id},fin)); if(fe)throw fe; }
       else { await sb.from('order_finance').delete().eq('order_id',id); }   // boost fiyatı 0 = finanssız kayıt
@@ -241,19 +241,19 @@ function openLightbox(id){const r=records.find(x=>x.id===id);if(!r||!r.image)ret
 function closeLightbox(){document.getElementById('lightbox').classList.add('hidden');}
 
 /* ============ SİPARİŞ İŞLEMLERİ ============ */
-async function setStatus(id,durum){const {error}=await sb.from('resells').update({durum}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
-async function togglePaid(id,val){const {error}=await sb.from('resells').update({paid:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
-async function toggleArchive(id,val){const {error}=await sb.from('resells').update({archived:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
+async function setStatus(id,durum){const {error}=await sb.from(TABLES.orders).update({durum}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
+async function togglePaid(id,val){const {error}=await sb.from(TABLES.orders).update({paid:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
+async function toggleArchive(id,val){const {error}=await sb.from(TABLES.orders).update({archived:val}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
 async function deleteRecord(id){
   if(!confirm('Bu iş KALICI olarak silinecek. Geri alınamaz. Emin misin?')) return;
-  const {data,error}=await sb.from('resells').delete().eq('id',id).select('id');
+  const {data,error}=await sb.from(TABLES.orders).delete().eq('id',id).select('id');
   if(error){alert('Silinemedi: '+error.message);return;}
   if(!data||!data.length){alert('Silinemedi: bu iş ödenmiş ya da yönetici finans bilgisi girmiş. Silinmesi gerekiyorsa yöneticiye söyle.');return;}
   if(editId===id) resetForm();
   await loadAll();
 }
 async function addShot(id,input){const f=input.files[0];if(!f)return;input.value='';const d=await compressImage(f);
-  const {error}=await sb.from('resells').update({image:d}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
+  const {error}=await sb.from(TABLES.orders).update({image:d}).eq('id',id);if(error){alert(error.message);return;}await loadAll();}
 
 /* ============ LİSTE RENDER ============ */
 function routeHTML(r){

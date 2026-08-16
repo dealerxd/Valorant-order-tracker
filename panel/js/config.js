@@ -28,15 +28,13 @@ const extraLabel=k=>{const d=EXTRA_DEF.find(e=>e.key===k);return d?d.label:k;};
 const extraMultOf=k=>((SETTINGS.extras||{})[k]||1);
 const extrasMult=keys=>(keys||[]).reduce((m,k)=>m*extraMultOf(k),1);
 
-const RANK_ORDER = ["Bronze 1","Bronze 2","Bronze 3","Silver 1","Silver 2","Silver 3","Gold 1","Gold 2","Gold 3",
-  "Plat 1","Plat 2","Plat 3","Diamond 1","Diamond 2","Diamond 3","Ascendant 1","Ascendant 2","Ascendant 3",
-  "Immortal 1","Immortal 2","Immortal 3"];
-const REGION_MULT = { "TR":1.00,"EU":1.00,"NA":1.05,"Diğer":1.10 };
+/* RANK_ORDER, REGION_MULT, STATUS_LABEL, NEXT_STATUS ve TABLES artık
+   js/domain.generated.js'ten geliyor — kaynağı shared/domain.json.
+   Takip botu aynı dosyayı okuyor; burada elle değiştirirsen bot'la ayrışır.
 
-/* Akış Tamam'da biter; ödeme ayrı takip edilir (paid bayrağı, 💰 butonu — sadece admin).
-   'odendi' etiketi eski kayıtların görüntülenmesi için duruyor. */
-const STATUS_LABEL={yeni:'Yeni',atandi:'Atandı',devam:'Devam',tamam:'Tamam',odendi:'Ödendi'};
-const NEXT_STATUS={yeni:'atandi',atandi:'devam',devam:'tamam'};
+   Akış Tamam'da biter; ödeme ayrı takip edilir (paid bayrağı, 💰 butonu —
+   sadece admin). 'odendi' etiketi eski kayıtların görüntülenmesi için duruyor,
+   formda seçenek değil. */
 
 /* Fiyat verisi (DB'den yüklenir)
    STEP_PRICE[r] = r rankından bir sonrakine çıkmanın TL fiyatı (bölüm başı).

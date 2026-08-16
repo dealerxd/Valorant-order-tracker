@@ -13,7 +13,7 @@ async function loadAll(){
   if(!me) return;
   setSync('','● yükleniyor…');
   const [rRes,pRes,fRes,iRes]=await Promise.all([
-    sb.from('resells').select('*').order('created_at',{ascending:false}),
+    sb.from(TABLES.orders).select('*').order('created_at',{ascending:false}),
     sb.from('profiles').select('*').order('display_name'),
     isAdmin()?sb.from('order_finance').select('*'):Promise.resolve({data:[]}),
     isAdmin()?sb.from('invites').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]})
@@ -36,4 +36,4 @@ const hasFin=id=>!!finance[id];   // booster'ın kendi girdiği işlerde finans 
 const brutTLof=id=>F(id).costTL;
 const netGelirTLof=id=>{const f=F(id);return Math.round(f.costTL*(1-f.feePct/100));};
 const komTLof=id=>{const f=F(id);return Math.round(f.costTL*f.feePct/100);};
-function subscribeRealtime(){ try{ sb.channel('rt').on('postgres_changes',{event:'*',schema:'public',table:'resells'},()=>loadAll()).subscribe(); }catch(e){} }
+function subscribeRealtime(){ try{ sb.channel('rt').on('postgres_changes',{event:'*',schema:'public',table:TABLES.orders},()=>loadAll()).subscribe(); }catch(e){} }

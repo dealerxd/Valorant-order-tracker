@@ -536,7 +536,63 @@ async def test_messages() -> None:
     check("ozet mac sayisi iceriyor", "Oynanan mac: 1" in summary)
 
 
+def test_shared_contract() -> None:
+    """Panel ile tracker ayni sozlesmeyi mi goruyor?
+
+    shared/domain.json iki tarafi da besliyor: tracker dogrudan okuyor, panel
+    ondan uretilen panel/js/domain.generated.js'i okuyor. Kaynagi degistirip
+    generate'i unutmak iki tarafi sessizce ayirir - asagidaki --check bunu
+    yakalar.
+    """
+    print("\n[ortak sozlesme]")
+
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import domain
+
+    root = Path(__file__).resolve().parent.parent
+
+    result = subprocess.run(
+        [sys.executable, str(root / "shared" / "generate.py"), "--check"],
+        capture_output=True, text=True,
+    )
+    check("uretilmis panel dosyasi guncel", result.returncode == 0,
+          result.stderr.strip())
+
+    # Panelin yazabilecegi her rank etiketi tracker tarafinda cozulmeli, yoksa
+    # /bagla "Panelde yazan hedef rank cozulemedi" deyip siparisi reddeder.
+    unresolved = [r for r in domain.PANEL_RANK_ORDER if ranks.parse_rank(r) is None]
+    check("panelin tum rank etiketleri cozuluyor", not unresolved, str(unresolved))
+
+    # Panel etiketi dogru tier'e gitmeli - 'Plat 1' Platinum 1'e denk gelmeli,
+    # tesadufen baska bir seye degil.
+    check("'Plat 1' -> Platinum 1", ranks.tier_name(ranks.parse_rank("Plat 1")) == "Platinum 1")
+    check("panel rank sirasi artan", [domain.PANEL_RANK_TO_TIER[r] for r in domain.PANEL_RANK_ORDER]
+          == sorted(domain.PANEL_RANK_TO_TIER[r] for r in domain.PANEL_RANK_ORDER))
+
+    # Panelin yazabilecegi her bolge bir API koduna gitmeli.
+    raw = json.loads((root / "shared" / "domain.json").read_text(encoding="utf-8"))
+    form_regions = [r["panel"] for r in raw["regions"] if r["form"]]
+    check("panel bolgeleri API koduna cozuluyor",
+          all(store_mod.panel_region_to_api(r) == next(
+              x["api"] for x in raw["regions"] if x["panel"] == r) for r in form_regions))
+
+    # Panelin '->' butonuyla ulasabilecegi durumlar tracker tarafinda taninmali.
+    reachable = {s["next"] for s in raw["statuses"] if s["next"]}
+    known = {s["key"] for s in raw["statuses"]}
+    check("durum akisi kapali", reachable <= known, str(reachable - known))
+    check("yoklanan durumlar listeleniyor",
+          set(domain.ACTIVE_STATUSES) <= set(domain.LISTABLE_STATUSES))
+
+    # store.py'nin kullandigi tablo isimleri sozlesmeden gelmeli.
+    check("tablo isimleri sozlesmeden", domain.ORDERS_TABLE == raw["tables"]["orders"])
+
+
 def main() -> int:
+    test_shared_contract()
     test_ranks()
     test_store_helpers()
     asyncio.run(test_webhook_mode())
