@@ -48,8 +48,8 @@ kâr = (boostFiyatı − komisyon) × kur − boosterÜcreti   (hepsi TL)
 ## Yayınlama
 
 Cloudflare Pages bu depoya bağlı, `main` dalına her push otomatik deploy olur.
-Panel artık deponun kökünde değil — Pages projesinde **Root directory** ayarı
-`panel` olmalı.
+Panel artık deponun kökünde değil — Pages projesinde **Build output directory**
+ayarı `panel` olmalı, Build command boş. Ayrıntı: depo kökündeki `README.md`.
 
 ## Yerel açma
 

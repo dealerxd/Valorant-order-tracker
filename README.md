@@ -77,16 +77,34 @@ Ayrıntılı dokümanlar: [`tracker/README.md`](tracker/README.md) ·
 
 | Parça | Nereye | Ayar |
 |---|---|---|
-| `panel/` | Cloudflare Pages | Root directory = `panel` |
+| `panel/` | Cloudflare Pages | Build output directory = `panel` |
 | `tracker/` | Railway | `railway.json` → `python tracker/main.py` |
 
-> **Birleştirme sonrası tek elle yapılacak iş:** Cloudflare Pages projesinde
-> **Settings → Builds & deployments → Root directory** alanını `panel` yap ve
-> bu depoya bağla. Bu dashboard ayarı, repodaki bir dosyadan değiştirilemiyor —
-> yapılmazsa panel deploy'u kırılır.
->
-> Railway tarafında ek iş yok: `railway.json` güncellendi, `requirements.txt`
-> ve `.python-version` Nixpacks bulsun diye kökte bırakıldı.
+### Cloudflare Pages ayarı
+
+Panel deponun kökünde değil, `panel/` altında. Pages projesinin bunu bilmesi
+gerekiyor — bu ayar dashboard'da duruyor, repodaki hiçbir dosyadan
+değiştirilemiyor:
+
+| Alan | Değer |
+|---|---|
+| Repository | `dealerxd/Valorant-order-tracker` |
+| Production branch | `main` |
+| Framework preset | None |
+| Build command | *(boş)* |
+| **Build output directory** | **`panel`** |
+| Root directory (advanced) | `/` — dokunma |
+
+Build command'in boş olması doğru: panel statik, derleme adımı yok. Dosyalar
+oldukları gibi yayınlanıyor.
+
+Deploy sonrası hızlı kontrol: giriş yap, bir siparişi aç, **Bölge** ve **Durum**
+açılır listelerine bak. İkisi de `js/domain.generated.js`'ten dolduruluyor —
+doluysa sözleşme tarayıcıya ulaşmış demektir. Boşsa üretilmiş dosya
+yüklenmemiştir.
+
+Railway tarafında ek iş yok: `requirements.txt` ve `.python-version` Nixpacks
+bulsun diye kökte bırakıldı.
 
 ## Anahtarlar
 
