@@ -60,6 +60,26 @@
     { "tier": 27, "api": "Radiant",     "panel": null }
   ],
 
+  "_elo": [
+    "HenrikDev'in `elo` alani tier ve RR'i tek sayiya indiriyor:",
+    "    elo = (tier - lowest_ranked_tier) * tier_width + rr",
+    "Dogrulama: Diamond 1 = tier 18, rr 38 -> (18-3)*100 + 38 = 1538",
+    "",
+    "Immortal ve ustunde RR tier icinden degil Immortal 1 tabanindan kumulatif",
+    "sayiliyor (Immortal 2 / 191 RR -> elo 2291, 2200+91 degil).",
+    "",
+    "Bu sabitler hem tracker/ranks.py'de hem panelin ilerleme cubugunda",
+    "kullaniliyor. Elo aritmetigi iki dilde ayri yazilmis durumda - en azindan",
+    "sabitleri tek yerden okusunlar ki biri digerini sessizce yanlis hesaplamasin."
+  ],
+  "elo": {
+    "lowest_ranked_tier": 3,
+    "immortal_start_tier": 24,
+    "radiant_tier": 27,
+    "tier_width": 100,
+    "progress_unreliable_above": 26
+  },
+
   "_regions": [
     "panel : `resells.region` alanindaki deger",
     "api   : HenrikDev bolge kodu",

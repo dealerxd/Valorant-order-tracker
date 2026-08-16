@@ -43,7 +43,7 @@ let STEP_PRICE = {}, RANK_VALUE = {}, NET_WIN_PRICE = {}, SETTINGS = {price_mult
   extras:{duo:2.0,stream:1.0,offline:1.0,agent:1.0,no5q:1.0,soloq:1.0}};
 
 /* Uygulama durumu */
-let me=null, records=[], finance={}, people=[], invites=[], formImage=null, editId=null;
+let me=null, records=[], finance={}, tracker={}, people=[], invites=[], formImage=null, editId=null;
 const isAdmin=()=> me && me.role==='admin';
 
 /* Yardımcılar */

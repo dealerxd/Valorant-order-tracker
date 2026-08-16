@@ -12,16 +12,23 @@ function rowToRec(r){
 async function loadAll(){
   if(!me) return;
   setSync('','● yükleniyor…');
-  const [rRes,pRes,fRes,iRes]=await Promise.all([
+  const [rRes,pRes,fRes,iRes,tRes]=await Promise.all([
     sb.from(TABLES.orders).select('*').order('created_at',{ascending:false}),
     sb.from('profiles').select('*').order('display_name'),
     isAdmin()?sb.from('order_finance').select('*'):Promise.resolve({data:[]}),
-    isAdmin()?sb.from('invites').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]})
+    isAdmin()?sb.from('invites').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]}),
+    // Takip durumu: sipariş başına tek satır, listedeki ilerleme rozetleri buradan.
+    // Maçlar burada çekilmiyor — sipariş başına yüzlerce satır olabiliyor,
+    // detail.js drawer açılınca ayrıca alıyor.
+    sb.from(TABLES.state).select('*')
   ]);
   if(rRes.error){ setSync('err','● hata'); alert('Veri çekilemedi: '+rRes.error.message); return; }
   records=(rRes.data||[]).map(rowToRec);
   people=pRes.data||[];
   invites=iRes.data||[];
+  // Takip verisi olmasa da panel çalışmalı: bot kapalıysa ya da RLS okumaya
+  // izin vermiyorsa rozetler görünmez, sipariş yönetimi etkilenmez.
+  tracker={}; (tRes.data||[]).forEach(t=>tracker[t.order_id]=t);
   finance={}; (fRes.data||[]).forEach(f=>finance[f.order_id]={
     platform:f.platform||'', platformRef:f.platform_ref||'',
     cost:Number(f.cost)||0, costCur:f.cost_currency||'USD', feePct:Number(f.fee_pct)||0,

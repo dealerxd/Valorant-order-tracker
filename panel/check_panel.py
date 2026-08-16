@@ -110,6 +110,57 @@ with sync_playwright() as p:
         "JSON.stringify(calcOffer('Gold 1','Plat 1',{region:'NA'}))")
     check("calcOffer rank listesiyle calisiyor", offer != "null", offer)
 
+    # --- Detay drawer'i ---------------------------------------------------
+    # Elo -> rank cevirimi tarayicida da dogru mu (test_smoke.py bunu node ile
+    # kontrol ediyor, burada gercek sayfada calistigini dogruluyoruz).
+    check("rankFromElo tarayicida calisiyor",
+          page.evaluate("rankFromElo(1538).label") == "Diamond 1"
+          and page.evaluate("rankFromElo(1538).rr") == 38)
+    check("Immortal ustu RR kumulatif",
+          page.evaluate("rankFromElo(2291).rr") == 191)
+    check("eloProgress orani",
+          abs(page.evaluate("eloProgress(900,1000,1100)") - 0.5) < 1e-9)
+    check("hedef gecilince oran 1'de kaliyor",
+          page.evaluate("eloProgress(900,9999,1100)") == 1)
+
+    check("drawer basta kapali",
+          page.eval_on_selector("#drawer", "el => el.classList.contains('hidden')"))
+
+    # Drawer'i sahte bir siparisle ac: records/tracker global'lerini doldurup
+    # openDetail cagiriyoruz. Supabase saplama oldugu icin mac sorgusu bos doner,
+    # yuklenemedi yolunun da cizildigini gormus oluyoruz.
+    page.evaluate("""
+      me = { id:'u1', display_name:'Test', role:'admin' };
+      records = [{ id:'o1', orderType:'rank', baslangic:'Gold 1', hedef:'Plat 1',
+        winCount:0, jobDesc:'', startRR:0, region:'TR', riotId:'Boost#TR1',
+        extras:[], extraWin:false, durum:'devam', tarih:'2026-08-16', not:'',
+        image:null, boosterId:null, payout:500, paid:false, archived:false, created:'' }];
+      tracker = { o1: { order_id:'o1', start_elo:900, current_elo:1000,
+        target_elo:1100, paused:false } };
+      openDetail('o1');
+    """)
+    page.wait_for_timeout(200)
+
+    check("drawer acildi",
+          not page.eval_on_selector("#drawer", "el => el.classList.contains('hidden')"))
+    body = page.inner_text("#drawerBody")
+    check("drawer ilerleme yuzdesi gosteriyor", "%50" in body, body[:200])
+    check("drawer baslangic rank'i gosteriyor", "Gold 1" in body, body[:200])
+    check("drawer hedef rank'i gosteriyor", "Plat 1" in body, body[:200])
+    check("drawer guncel rank'i gosteriyor", "Gold 2" in body, body[:200])
+    check("drawer kalan RR'i gosteriyor", "100 RR" in body, body[:200])
+    # Inline style yerine gercek genisligi olcuyoruz: tarayici "50.0%" degerini
+    # "50%"e normalize ediyor, string karsilastirmasi kirilgan olurdu.
+    fill_ratio = page.evaluate(
+        "document.querySelector('.d-fill').getBoundingClientRect().width"
+        " / document.querySelector('.d-bar').getBoundingClientRect().width")
+    check("ilerleme cubugu gorsel olarak yarida", abs(fill_ratio - 0.5) < 0.02,
+          f"olculen oran {fill_ratio:.3f}")
+
+    page.evaluate("closeDetail()")
+    check("drawer kapandi",
+          page.eval_on_selector("#drawer", "el => el.classList.contains('hidden')"))
+
     browser.close()
 
 print(f"\n{'BASARISIZ: ' + ', '.join(failures) if failures else 'panel kontrolleri gecti.'}")

@@ -31,6 +31,32 @@ function fillRegionSelects(){
   });
 }
 
+/* ---- Elo aritmetigi (takip drawer'i icin) ----
+   Sabitler shared/domain.json'dan; tracker/ranks.py ayni degerleri okuyor. */
+const ELO = {"lowest_ranked_tier": 3, "immortal_start_tier": 24, "radiant_tier": 27, "tier_width": 100, "progress_unreliable_above": 26};
+const TIER_NAME = {"0": "Unranked", "3": "Iron 1", "4": "Iron 2", "5": "Iron 3", "6": "Bronze 1", "7": "Bronze 2", "8": "Bronze 3", "9": "Silver 1", "10": "Silver 2", "11": "Silver 3", "12": "Gold 1", "13": "Gold 2", "14": "Gold 3", "15": "Plat 1", "16": "Plat 2", "17": "Plat 3", "18": "Diamond 1", "19": "Diamond 2", "20": "Diamond 3", "21": "Ascendant 1", "22": "Ascendant 2", "23": "Ascendant 3", "24": "Immortal 1", "25": "Immortal 2", "26": "Immortal 3", "27": "Radiant"};
+
+/* elo -> {tier, rr, label}. Immortal ve ustunde RR tier icinden degil
+   Immortal 1 tabanindan kumulatif sayilir - ranks.py ile ayni kural. */
+function rankFromElo(elo){
+  if(elo==null) return null;
+  if(elo < 0) elo = 0;
+  const immortalBase = (ELO.immortal_start_tier - ELO.lowest_ranked_tier) * ELO.tier_width;
+  const tier = Math.min(ELO.radiant_tier, ELO.lowest_ranked_tier + Math.floor(elo / ELO.tier_width));
+  const rr = tier >= ELO.immortal_start_tier ? elo - immortalBase : elo % ELO.tier_width;
+  return { tier, rr, label: TIER_NAME[tier] || ('Tier ' + tier) };
+}
+
+/* Hedefe ilerleme orani (0-1). Hedef baslangica esitse tam kabul edilir. */
+function eloProgress(startElo, currentElo, targetElo){
+  const span = targetElo - startElo;
+  if(!(span > 0)) return 1;
+  return Math.max(0, Math.min(1, (currentElo - startElo) / span));
+}
+
+/* Immortal 3'un ustunde siralama leaderboard'a bagli, yuzde yaklasiktir. */
+const eloProgressReliable = tier => tier == null || tier <= ELO.progress_unreliable_above;
+
 /* Durum <select>'ini doldurur (formda secilebilir olanlar). */
 function fillStatusSelects(){
   document.querySelectorAll('select[data-status]').forEach(sel=>{

@@ -547,6 +547,7 @@ def test_shared_contract() -> None:
     print("\n[ortak sozlesme]")
 
     import json
+    import shutil
     import subprocess
     import sys
     from pathlib import Path
@@ -589,6 +590,33 @@ def test_shared_contract() -> None:
 
     # store.py'nin kullandigi tablo isimleri sozlesmeden gelmeli.
     check("tablo isimleri sozlesmeden", domain.ORDERS_TABLE == raw["tables"]["orders"])
+
+    # Elo -> rank formulu iki dilde ayri yazili (ranks.py ve panelin
+    # rankFromElo'su). Sabitler ortak ama formuller degil - biri digerinden
+    # ayrilirsa panel musteriye botun soyledigi rank'tan baskasini gosterir.
+    # node yoksa kontrol atlanir; testin geri kalani agsiz calismaya devam eder.
+    if shutil.which("node") is None:
+        print("  --  node yok, JS/Python elo karsilastirmasi atlandi")
+        return
+
+    probes = list(range(0, 2900, 37)) + [0, 99, 100, 1538, 2099, 2100, 2291, 2400, 2699, 2700]
+    script = (
+        f"{(root / 'panel' / 'js' / 'domain.generated.js').read_text(encoding='utf-8')}\n"
+        f"const out = {json.dumps(probes)}.map(e => {{const r = rankFromElo(e); "
+        "return [e, r.tier, r.rr];});\n"
+        "console.log(JSON.stringify(out));"
+    )
+    proc = subprocess.run([shutil.which("node"), "-e", script], capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise AssertionError(f"panelin elo kodu calismadi: {proc.stderr.strip()[:300]}")
+
+    mismatches = []
+    for elo, js_tier, js_rr in json.loads(proc.stdout):
+        py_tier, py_rr = ranks.tier_from_elo(elo)
+        if (py_tier, py_rr) != (js_tier, js_rr):
+            mismatches.append(f"elo {elo}: py=({py_tier},{py_rr}) js=({js_tier},{js_rr})")
+    check(f"elo->rank JS ve Python ayni ({len(probes)} deger)",
+          not mismatches, "; ".join(mismatches[:4]))
 
 
 def main() -> int:

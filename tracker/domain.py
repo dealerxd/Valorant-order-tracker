@@ -55,6 +55,12 @@ PANEL_RANK_TO_TIER: dict[str, int] = {
 # Panelde secilebilen rank'lar, sirasiyla (Bronze 1 ... Immortal 3).
 PANEL_RANK_ORDER: list[str] = [r["panel"] for r in RANKS if r["panel"]]
 
+# --- Elo aritmetigi ----------------------------------------------------------
+
+# ranks.py bu sabitleri okuyor; panel de ayni degerleri uretilmis dosyadan
+# aliyor (rankFromElo). Formul iki dilde ayri yazili, sabitler tek yerde.
+ELO: dict[str, int] = DOMAIN["elo"]
+
 # --- Bolgeler ----------------------------------------------------------------
 
 REGIONS: list[dict[str, Any]] = DOMAIN["regions"]
