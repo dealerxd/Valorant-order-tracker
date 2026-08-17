@@ -358,7 +358,7 @@ with sync_playwright() as p:
           page.evaluate("!alertModel().some(a => a.id === 'o4' && "
                         "['baglanmadi','takildi','kayip'].includes(a.tur))"))
 
-    check("KPI kartlari cizildi", page.eval_on_selector_all(".ov-kpi", "e => e.length") == 4)
+    check("KPI kartlari cizildi", page.eval_on_selector_all(".ov-kpi", "e => e.length") == 5)
     check("huni durum sayisi", page.eval_on_selector_all(".ov-fun", "e => e.length") == 4)
     check("oyun kirilimi iki oyun", page.eval_on_selector_all(".ov-game", "e => e.length") == 2)
     check("bot kutusu calisiyor diyor", "çalışıyor" in page.inner_text("#botBox"))
@@ -667,6 +667,117 @@ with sync_playwright() as p:
     check("ayni sutuna birakma bosuna yazmiyor",
           page.evaluate("window.__patch.length") == 0)
     page.evaluate("bulkPatch = window.__realPatch; setOrdersView('kart'); render();")
+
+    # --- Oyun şeridi ------------------------------------------------------
+    # Şerit tek filtre: Genel Bakış ile Sipariş listesini BİRLİKTE daraltmalı,
+    # yoksa "Valorant"a bakarken KPI'lar hepsini sayar.
+    page.evaluate("""
+      records[2].game = 'rl';
+      me = { id:'admin1', role:'admin', display_name:'Rex' };
+      setGameScope(''); switchTab('siparis'); render();
+    """)
+    page.wait_for_timeout(150)
+    check("serit 'Tumu' + iki oyun",
+          page.eval_on_selector_all("#gameStrip .gs", "e => e.length") == 3,
+          str(page.eval_on_selector_all("#gameStrip .gs", "e => e.map(x=>x.textContent.trim())")))
+    hepsi = page.evaluate("filterRecords().length")
+    page.evaluate("setGameScope('rl')"); page.wait_for_timeout(150)
+    check("serit sipariş listesini daraltiyor",
+          page.evaluate("filterRecords().length") == 1,
+          f"hepsi={hepsi} rl={page.evaluate('filterRecords().length')}")
+    check("serit Genel Bakis'i da daraltiyor",
+          page.evaluate("scopeRecs().length") == 1)
+    check("kapsam disi is KPI'a girmiyor",
+          page.evaluate("paraOzeti().ucret") == page.evaluate(
+            "records.filter(r=>r.game==='rl'&&!r.archived).reduce((a,r)=>a+r.payout,0)"))
+    # Borç şeritten etkilenmemeli: filtre yüzünden ödeme unutulmasın.
+    page.evaluate("switchTab('odeme')"); page.wait_for_timeout(150)
+    check("odemeler seritten etkilenmiyor",
+          page.evaluate("odemeSaticiGruplari().length") == 1
+          and "Mert" in page.inner_text("#odemeBody"))
+    check("odeme ekraninda serit gizli",
+          page.eval_on_selector("#gameStrip", "e => getComputedStyle(e).display") == "none")
+    # Zil de kapsam dışı: filtreliyken kritik uyarıyı kaçırmamalı.
+    page.evaluate("switchTab('genel')"); page.wait_for_timeout(150)
+    check("zil seritten etkilenmiyor",
+          page.evaluate("alertModel().length")
+          == page.eval_on_selector(".ov-h .ov-n", "e => Number(e.textContent)"))
+    page.evaluate("setGameScope('')")
+    # Tek oyun kalırsa şerit gürültü; hiç çizilmemeli.
+    page.evaluate("records.forEach(r => r.game='valorant'); switchTab('siparis'); render();")
+    page.wait_for_timeout(150)
+    check("tek oyunda serit gizli",
+          page.eval_on_selector("#gameStrip", "e => getComputedStyle(e).display") == "none")
+    page.evaluate("records[2].game='rl'; render();")
+
+    # --- İlerleme çubuğu --------------------------------------------------
+    # Takip verisi olan iş GERÇEK elo ilerlemesini, olmayan iş akıştaki adımı
+    # gösteriyor. İkisi karışırsa "%60" maç sonucu sanılır.
+    page.evaluate("""
+      tracker = { A:{order_id:'A',puuid:'p',start_elo:900,current_elo:1000,target_elo:1100,
+                     paused:false,last_poll_at:new Date().toISOString(),
+                     last_match_at:new Date().toISOString(),loss_streak:0} };
+    """)
+    check("takipli iste gercek elo ilerlemesi",
+          abs(page.evaluate("ilerleme(records[0]).oran") - 0.5) < 1e-9
+          and page.evaluate("ilerleme(records[0]).takip") is True)
+    check("takipli isin etiketi guncel rank'i yaziyor",
+          "Gold 2" in page.evaluate("ilerleme(records[0]).etiket"),
+          page.evaluate("ilerleme(records[0]).etiket"))
+    check("takipsiz iste adim ilerlemesi",
+          page.evaluate("ilerleme(records[1]).takip") is False
+          and abs(page.evaluate("ilerleme(records[1]).oran") - 0.6) < 1e-9)
+    check("takipsiz isin etiketi takip olmadigini soyluyor",
+          "takip" in page.evaluate("ilerleme(records[1]).etiket"),
+          page.evaluate("ilerleme(records[1]).etiket"))
+    page.evaluate("render()"); page.wait_for_timeout(120)
+    check("kartta ilerleme cubugu var",
+          page.eval_on_selector_all(".rec .rec-prog-bar", "e => e.length") == 3,
+          str(page.eval_on_selector_all(".rec .rec-prog-bar", "e => e.length")))
+    check("canli cubuk yalnizca takipli iste",
+          page.eval_on_selector_all(".rec .rec-prog-bar.canli", "e => e.length") == 1)
+    # Duraklatılmış takip canlı sayılmamalı — bar donmuş veriyi göstermesin.
+    page.evaluate("tracker.A.paused = true;")
+    check("duraklatilan takip canli degil",
+          page.evaluate("ilerleme(records[0]).takip") is False)
+    page.evaluate("tracker.A.paused = false;")
+
+    # --- Kart eylem menüsü ------------------------------------------------
+    # Yedi buton kartı üç satır uzatıyordu; "⋯" ile açılıyor ama HİÇBİRİ
+    # kaybolmadı — kaybolsaydı silme/arşivleme panelden erişilemez olurdu.
+    page.evaluate("acikEylem = null; render();"); page.wait_for_timeout(120)
+    check("ek eylemler basta kapali",
+          page.eval_on_selector_all(".rec-more",
+            "e => e.every(x => getComputedStyle(x).display === 'none')"))
+    page.evaluate("toggleEylem(records[0].id)")
+    acik = page.eval_on_selector_all(".rec-more",
+        "e => e.filter(x => getComputedStyle(x).display !== 'none').length")
+    check("bir kartin eylemleri acildi", acik == 1, str(acik))
+    etiketler = page.eval_on_selector_all(
+        f".rec-more[data-acts='{page.evaluate('records[0].id')}'] .icon-btn",
+        "e => e.map(x => x.textContent.trim())")
+    for gereken in ["Düzenle", "Ödendi", "Arşivle", "Sil"]:
+        check(f"'{gereken}' eylemi hala erisilebilir",
+              any(gereken in t for t in etiketler), str(etiketler))
+    page.evaluate("toggleEylem(records[0].id)")
+    check("ikinci tikla kapaniyor",
+          page.eval_on_selector_all(".rec-more",
+            "e => e.every(x => getComputedStyle(x).display === 'none')"))
+
+    # Kâr kartta da dış kaynak giderini düşmeli (ekranlar ayrışmasın).
+    page.evaluate("""
+      finance.C = {platform:'E',cost:50,costCur:'USD',feePct:0,costTL:2000,rate:40};
+      setGameScope('rl'); render();
+    """)
+    page.wait_for_timeout(150)
+    kart_kar = page.eval_on_selector_all(".rec .rec-f",
+        "els => { const e = els.find(x => x.textContent.includes('kâr'));"
+        " return e ? e.querySelector('.rec-f-v').textContent.trim() : null; }")
+    check("kart kari dis gideri dusuyor",
+          kart_kar == page.evaluate(
+            "fmt(netGelirTLof('C') - records[2].payout - disMaliyetTL(records[2]),'TRY')"),
+          f"kart={kart_kar}")
+    page.evaluate("setGameScope(''); delete finance.C; render();")
 
     browser.close()
 

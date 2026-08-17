@@ -58,7 +58,9 @@ function renderPayments(){
   const box = document.getElementById('odemeBody'); if(!box) return;
   if(!isAdmin()){ box.innerHTML = '<div class="ov-empty">Bu ekran yalnızca admin içindir.</div>'; return; }
 
-  const P = paraOzeti();
+  // Borç oyun şeridinden etkilenmemeli: "Valorant"a bakarken Rocket League
+  // borcunun kaybolması ödemeyi unutturur.
+  const P = paraOzeti(activeRecs());
   const bst = odemeBoosterGruplari();
   const sat = odemeSaticiGruplari();
 
@@ -95,7 +97,8 @@ function renderPayments(){
       <button class="icon-btn go" onclick="odeBooster('${esc(g.id)}')">💰 Ödendi</button>
     </div>
     <div class="pay-jobs">${g.isler.map(r =>
-      `<button class="pay-job" onclick="openDetail('${esc(r.id)}')">${routeHTML(r)}
+      `<button class="pay-job" onclick="openDetail('${esc(r.id)}')">
+         <span class="pay-job-r">${routeHTML(r)}</span>
          <span class="pay-job-a">${fmt(r.payout,'TRY')}</span></button>`).join('')}</div>`).join(''),
     'Bekleyen booster ödemesi yok.');
 
@@ -110,7 +113,8 @@ function renderPayments(){
       <button class="icon-btn go" onclick="odeSatici('${esc(g.ad)}')">💰 Ödendi</button>
     </div>
     <div class="pay-jobs">${g.isler.map(r =>
-      `<button class="pay-job" onclick="openDetail('${esc(r.id)}')">${routeHTML(r)}
+      `<button class="pay-job" onclick="openDetail('${esc(r.id)}')">
+         <span class="pay-job-r">${routeHTML(r)}</span>
          <span class="pay-job-a">${fmt(r.vendorCost, r.vendorCur)}</span></button>`).join('')}</div>`).join(''),
     'Bekleyen satıcı ödemesi yok.');
 

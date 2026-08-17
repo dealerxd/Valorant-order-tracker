@@ -1,12 +1,8 @@
 /* ============ SİPARİŞ FORMU ============ */
 /* Oyun <select>'i: rank listeleri ve Riot ID alanı buna bağlı. */
 function fillGameSelects(){
-  const f=document.getElementById('gameSel'), flt=document.getElementById('filterGame');
+  const f=document.getElementById('gameSel');
   if(f && !f.options.length) GAMES.forEach(g=>f.add(new Option(g.label,g.id)));
-  if(flt && !flt.options.length){
-    flt.add(new Option('Tüm oyunlar',''));
-    GAMES.forEach(g=>flt.add(new Option(g.label,g.id)));
-  }
 }
 
 /* Oyun değişince rank listeleri yenilenir ve takip alanı gizlenir/görünür.
@@ -422,7 +418,7 @@ function setOrdersDurum(d){ ordersView.durum = d; ordersView.sel.clear(); render
 function setOrdersFilter(f){
   switchTab('siparis');
   if('durum'   in f) ordersView.durum = f.durum;
-  if('game'    in f) document.getElementById('filterGame').value = f.game;
+  if('game'    in f) setGameScope(f.game, true);
   if('booster' in f) document.getElementById('filterBooster').value = f.booster;
   if('archive' in f) document.getElementById('filterArchive').value = f.archive;
   if('q'       in f) document.getElementById('search').value = f.q;
@@ -432,13 +428,12 @@ function setOrdersFilter(f){
 
 function filterRecords(){
   const q  = (document.getElementById('search').value || '').toLowerCase();
-  const fg = (document.getElementById('filterGame') || {}).value || '';
   const fb = document.getElementById('filterBooster').value;
   const fa = document.getElementById('filterArchive').value;
   return records.filter(r => {
     if(fa === 'active' && r.archived) return false;
     if(fa === 'arch' && !r.archived) return false;
-    if(fg && r.game !== fg) return false;
+    if(!inScope(r)) return false;
     // 'acik' sanal bir durum: akışı bitmemiş işler. Genel Bakış'taki
     // "Açık sipariş" KPI'ı buna bağlı, yoksa tıklayınca farklı sayı çıkardı.
     if(ordersView.durum === 'acik'){ if(!isOpen(r)) return false; }
@@ -570,42 +565,74 @@ function nextBtn(r){
 
 /* --- Görünümler ----------------------------------------------------------- */
 
+/* Kart üstündeki ilerleme çubuğu. Takip verisi varsa gerçek elo ilerlemesi,
+   yoksa işin akıştaki adımı — etiket hangisi olduğunu söylüyor (ui-common). */
+function ilerlemeHTML(r){
+  const p = ilerleme(r);
+  return `<div class="rec-prog">
+    <div class="rec-prog-bar ${p.takip ? 'canli' : ''}"><span style="width:${(p.oran*100).toFixed(1)}%"></span></div>
+    <div class="rec-prog-l">${esc(p.etiket)}</div></div>`;
+}
+
+/* Kart eylemleri. Tasarımda kartın ayağında tek "Detay" var; buradaki yedi
+   buton kartı üç satır uzatıp listeyi okunmaz hâle getiriyordu. Sık kullanılan
+   ikisi (durumu ilerlet, detay) ayakta duruyor, kalanı "⋯" ile açılıyor —
+   hiçbir eylem kaybolmadı, sadece varsayılan olarak kapalı. */
+let acikEylem = null;
+
+function toggleEylem(id, e){
+  if(e) e.stopPropagation();
+  acikEylem = acikEylem === id ? null : id;
+  document.querySelectorAll('[data-acts]').forEach(el =>
+    el.classList.toggle('hidden', el.dataset.acts !== acikEylem));
+  document.querySelectorAll('[data-actbtn]').forEach(el =>
+    el.classList.toggle('active', el.dataset.actbtn === acikEylem));
+}
+
 function cardHTML(r){
-    const f=F(r.id); const netTL=netGelirTLof(r.id), kar=netTL-r.payout;
-    const priceBlock=isAdmin()
+    const f=F(r.id); const netTL=netGelirTLof(r.id), kar=netTL-r.payout-disMaliyetTL(r);
+    const ayak=isAdmin()
       ? (hasFin(r.id)
-          ? `<div class="rec-price">${fmt(netTL,'TRY')}</div><div class="rec-sub">boost ${fmt(f.cost,f.costCur)}${f.feePct?` · kom %${f.feePct}`:''} · booster ${r.payout.toLocaleString('tr-TR')} · <span class="kar">kâr ${fmt(kar,'TRY')}</span></div>`
-          : `<div class="rec-price" style="color:var(--amber);font-size:15px">finans yok</div><div class="rec-sub">booster ${r.payout.toLocaleString('tr-TR')} · ✎ ile boost fiyatını gir</div>`)
-      : `<div class="rec-price">${r.payout.toLocaleString('tr-TR')} ₺</div><div class="rec-sub">kazancın</div>`;
+          ? `<div class="rec-f"><span class="rec-f-l">net gelir</span><span class="rec-f-v">${fmt(netTL,'TRY')}</span></div>
+             <div class="rec-f"><span class="rec-f-l">kâr</span><span class="rec-f-v ${kar<0?'neg':'pos'}">${fmt(kar,'TRY')}</span></div>`
+          : `<div class="rec-f"><span class="rec-f-l">finans</span><span class="rec-f-v warn">girilmemiş</span></div>
+             <div class="rec-f"><span class="rec-f-l">booster</span><span class="rec-f-v">${fmt(r.payout,'TRY')}</span></div>`)
+      : `<div class="rec-f"><span class="rec-f-l">kazancın</span><span class="rec-f-v">${fmt(r.payout,'TRY')}</span></div>`;
     const shot=r.image?`<div class="rec-shot"><img src="${r.image}" onclick="openLightbox('${r.id}')"></div>`:'';
     return `<div class="rec ${r.archived?'arch':''}">
       <div class="rec-top"><div>
-        <div class="rec-route open" onclick="openDetail('${r.id}')" title="Detayı aç">${routeHTML(r)}</div>
+        <div class="rec-route open" onclick="openDetail('${r.id}')" title="Detayı aç">
+          <span class="chip game">${esc(gameOf(r.game).short)}</span> ${routeHTML(r)}</div>
         <div class="rec-meta" style="margin-top:7px">
-          <span class="chip game">${esc(gameOf(r.game).short)}</span>
           ${isAdmin()&&isDis(r)?`<span class="chip dis">🏷 ${esc(r.vendor)}${r.vendorPaid?'':' · ödenmedi'}</span>`:''}
           ${r.orderType!=='rank'?`<span class="chip" style="border-color:rgba(90,157,237,.35);color:var(--blue)">🎯 ${ORDER_TYPES[r.orderType]}</span>`:''}
           ${r.archived?`<span class="chip" style="color:var(--amber)">🗄 arşiv</span>`:''}
           ${isAdmin()&&f.platform?`<span class="chip" style="border-color:rgba(212,175,55,.3);color:var(--gold)">🛒 ${esc(f.platform)}${refHTML(f.platformRef)}</span>`:''}
           ${isAdmin()&&r.boosterId?`<span class="chip booster">👤 ${esc(nameOf(r.boosterId))}</span>`:''}
-          ${isAdmin()&&!r.boosterId?`<span class="chip" style="color:var(--amber)">⚠ atanmadı</span>`:''}
+          ${isAdmin()&&!r.boosterId&&!isDis(r)?`<span class="chip" style="color:var(--amber)">⚠ atanmadı</span>`:''}
           <span class="chip">🗓 ${r.tarih}</span>
           ${r.orderType==='rank'&&r.startRR?`<span class="chip">RR ${r.startRR}</span>`:''}
           ${r.orderType==='rank'&&r.region!=='TR'?`<span class="chip">🌍 ${esc(r.region)}</span>`:''}
           ${r.riotId?`<span class="chip" style="border-color:rgba(90,157,237,.35);color:var(--blue)">🎮 ${esc(r.riotId)}</span>`:''}
-          ${trackChip(r)}
           ${r.orderType==='rank'&&r.extraWin?`<span class="chip">➕ Extra Win</span>`:''}
           ${(r.extras||[]).map(k=>`<span class="chip">✚ ${esc(extraLabel(k))}</span>`).join('')}
           ${r.payout>0?`<span class="chip ${r.paid?'paid':'unpaid'}">${r.paid?'✓ ödendi':'● ödenmedi'}</span>`:''}
         </div>
-      </div><div style="text-align:right">${priceBlock}
-        <span class="status ${r.durum}" style="margin-top:6px;display:inline-block">${STATUS_LABEL[r.durum]}</span></div></div>
+      </div>
+      <span class="status ${esc(r.durum)}">${esc(STATUS_LABEL[r.durum]||r.durum)}</span></div>
+      ${ilerlemeHTML(r)}
       ${r.jobDesc?`<div class="rec-note">📋 ${esc(r.jobDesc)}</div>`:''}
       ${r.not?`<div class="rec-note">${esc(r.not)}</div>`:''}${shot}
-      <div class="rec-actions">
-        ${NEXT_STATUS[r.durum]?`<button class="icon-btn go" onclick="setStatus('${r.id}','${NEXT_STATUS[r.durum]}')">→ ${STATUS_LABEL[NEXT_STATUS[r.durum]]}</button>`:''}
-        <button class="icon-btn" onclick="document.getElementById('shot-${r.id}').click()">📷 ${r.image?'Değiştir':'Görsel'}</button>
-        <button class="icon-btn" onclick="openDetail('${r.id}')">🔍 Detay</button>
+      <div class="rec-foot">
+        ${ayak}
+        <div class="rec-foot-b">
+          ${NEXT_STATUS[r.durum]?`<button class="icon-btn go" onclick="setStatus('${r.id}','${NEXT_STATUS[r.durum]}')">→ ${STATUS_LABEL[NEXT_STATUS[r.durum]]}</button>`:''}
+          <button class="icon-btn" onclick="openDetail('${r.id}')">🔍 Detay</button>
+          <button class="icon-btn more" data-actbtn="${esc(r.id)}" onclick="toggleEylem('${esc(r.id)}',event)" title="Diğer işlemler">⋯</button>
+        </div>
+      </div>
+      <div class="rec-more ${acikEylem===r.id?'':'hidden'}" data-acts="${esc(r.id)}">
+        <button class="icon-btn" onclick="document.getElementById('shot-${r.id}').click()">📷 ${r.image?'Görseli değiştir':'Görsel ekle'}</button>
         <button class="icon-btn" onclick="editRecord('${r.id}')">✎ Düzenle</button>
         ${isAdmin()&&r.payout>0?`<button class="icon-btn" onclick="togglePaid('${r.id}',${!r.paid})">${r.paid?'↺ Ödeme geri':'💰 Ödendi'}</button>`:''}
         ${isAdmin()?`<button class="icon-btn" onclick="toggleArchive('${r.id}',${!r.archived})">${r.archived?'↩ Arşivden çıkar':'🗄 Arşivle'}</button>`:''}
@@ -625,7 +652,7 @@ function renderTable(list){
         ${list.length && ordersView.sel.size===list.length?'checked':''}></th>
     <th>İş</th><th class="c-game">Oyun</th><th class="c-st">Durum</th>
     ${admin?'<th class="c-b">Booster</th>':''}
-    <th class="c-track">Takip</th>
+    <th class="c-track">İlerleme</th>
     ${admin?'<th class="r c-m">Net Gelir</th><th class="r c-m">Kâr</th>':'<th class="r c-m">Kazancın</th>'}
     <th class="c-act"></th></tr>`;
   const satir = r => {
@@ -644,7 +671,7 @@ function renderTable(list){
       <td class="c-st"><span class="status ${esc(r.durum)}">${esc(STATUS_LABEL[r.durum]||r.durum)}</span></td>
       ${admin?`<td class="c-b">${isDis(r)?`<span class="chip dis">🏷 ${esc(r.vendor)}</span>`
         :r.boosterId?esc(nameOf(r.boosterId)):'<span class="dim">atanmadı</span>'}</td>`:''}
-      <td class="c-track">${trackChip(r)||'<span class="dim">—</span>'}</td>
+      <td class="c-track">${ilerlemeHTML(r)}</td>
       ${para}
       <td class="c-act">${nextBtn(r)}<button class="icon-btn" onclick="openDetail('${r.id}')">🔍</button></td>
     </tr>`;
@@ -663,7 +690,10 @@ function renderBoard(list){
   const ekstra = [...new Set(list.map(r => r.durum))].filter(k => !FORM_STATUSES.includes(k));
   const sutunlar = FORM_STATUSES.filter(k => k !== 'odendi' || list.some(r => r.durum === 'odendi'))
     .concat(ekstra);
-  return `<div class="board">${sutunlar.map(k => {
+  return `<div class="board-hint">Kartı sütuna sürükleyerek durumunu değiştir.
+      Birden çok kart seçiliyse hepsi taşınır. Dokunmatikte kart üstündeki
+      <b>→</b> butonunu kullan.</div>
+    <div class="board">${sutunlar.map(k => {
     const kolon = list.filter(r => r.durum === k);
     return `<div class="bcol" data-col="${esc(k)}"
         ondragover="boardDragOver(event,'${esc(k)}')" ondragleave="boardDragLeave(event)"
@@ -673,12 +703,18 @@ function renderBoard(list){
         <div class="bcard" data-selrow="${esc(r.id)}" draggable="true"
              ondragstart="boardDragStart(event,'${esc(r.id)}')" ondragend="boardDragEnd(event)"
              onclick="openDetail('${esc(r.id)}')">
-          <div class="o-route">${routeHTML(r)}</div>
+          <div class="bcard-top">
+            <span class="bcard-grip" title="sürükle">⠿</span>
+            <div class="bcard-head">
+              <div class="o-route"><span class="chip game">${esc(gameOf(r.game).short)}</span> ${routeHTML(r)}</div>
+              <div class="bcard-sub">${esc(r.tarih || '')}${r.riotId ? ' · ' + esc(r.riotId) : ''}</div>
+            </div>
+          </div>
+          ${ilerlemeHTML(r)}
           <div class="bcard-meta">
-            <span class="chip game">${esc(gameOf(r.game).short)}</span>
           ${isAdmin()&&isDis(r)?`<span class="chip dis">🏷 ${esc(r.vendor)}${r.vendorPaid?'':' · ödenmedi'}</span>`:''}
             ${isAdmin()&&r.boosterId?`<span class="chip booster">${esc(nameOf(r.boosterId))}</span>`:''}
-            ${trackChip(r)}
+            ${isAdmin()&&r.payout>0?`<span class="bcard-pay">${fmt(r.payout,'TRY')}</span>`:''}
           </div>
           <div class="bcard-foot">${nextBtn(r)}</div>
         </div>`).join('') || '<div class="bcol-empty">boş</div>'}</div>

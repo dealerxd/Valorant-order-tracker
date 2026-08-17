@@ -86,9 +86,47 @@ function renderShell(){
   const sub   = document.getElementById('pageSub');
   if(title) title.textContent = t;
   if(sub)   sub.textContent   = s;
+  renderGameStrip();
   renderBotBox();
   refreshNavBadges();
   renderNotifDot();
+}
+
+/* --- Oyun şeridi ----------------------------------------------------------
+
+   Yalnızca kapsamı olan sayfalarda (Genel Bakış, Siparişler) çiziliyor —
+   Fiyat Listesi'nin ya da Profil'in oyunla daraltılacak bir şeyi yok, orada
+   duran bir şerit "burada da filtreliyor" izlenimi verirdi.
+
+   Tek oyun varsa şerit hiç görünmüyor: tek seçenekli bir filtre gürültü. */
+const GSTRIP_TABS = ['genel', 'siparis'];
+
+function renderGameStrip(){
+  const box = document.getElementById('gameStrip'); if(!box) return;
+  const liste = activeRecs();
+  const oyunlar = GAMES.filter(g => liste.some(r => r.game === g.id));
+  const goster = GSTRIP_TABS.includes(currentTab) && oyunlar.length > 1;
+  box.classList.toggle('hidden', !goster);
+  if(!goster) return;
+  // Kapsamdaki oyunun siparişi kalmadıysa (hepsi arşivlendi) şeritte
+  // seçili görünecek bir sekme kalmaz; sessizce "Tümü"ne dönüyoruz.
+  if(gameScope && !oyunlar.some(g => g.id === gameScope)) gameScope = '';
+  const sekme = (id, etiket, adet) =>
+    `<button class="gs${id === gameScope ? ' active' : ''}" onclick="setGameScope('${esc(id)}')">
+       ${esc(etiket)}<span class="gs-n">${adet}</span></button>`;
+  box.innerHTML = sekme('', 'Tüm oyunlar', liste.length)
+    + oyunlar.map(g => sekme(g.id, g.label, liste.filter(r => r.game === g.id).length)).join('');
+}
+
+/* sessiz: setOrdersFilter zaten kendi render'ını yapıyor, iki kez çizmeyelim. */
+function setGameScope(id, sessiz){
+  gameScope = id || '';
+  lsSet('gameScope', gameScope);
+  if(sessiz) return;
+  ordersView.sel.clear();
+  renderGameStrip();
+  if(currentTab === 'siparis') render();
+  if(currentTab === 'genel')   renderOverview();
 }
 
 function renderBotBox(){

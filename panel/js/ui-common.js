@@ -51,6 +51,39 @@ const isDis      = r => !!(r.vendor && r.vendor.trim());
 const isActive   = r => !r.archived && (r.durum === 'atandi' || r.durum === 'devam');
 const activeRecs = () => records.filter(r => !r.archived);
 
+/* --- Oyun kapsamı ---------------------------------------------------------
+
+   Topbar altındaki oyun şeridi. Genel Bakış ile Sipariş listesini birlikte
+   daraltıyor — iki ekranda iki ayrı oyun filtresi olsaydı "Valorant"a
+   bakarken KPI'lar hepsini sayardı.
+
+   Zil, rozetler ve Ödemeler bilinçli olarak kapsam DIŞI: filtre yüzünden bir
+   uyarıyı ya da bir borcu kaçırmak, filtrenin işe yaramasından daha pahalı. */
+let gameScope = lsGet('gameScope', '');       // '' = hepsi
+const inScope   = r => !gameScope || r.game === gameScope;
+const scopeRecs = () => activeRecs().filter(inScope);
+
+/* --- İlerleme -------------------------------------------------------------
+
+   İki farklı şey tek çubukta gösterilemez: takip botunun ölçtüğü GERÇEK elo
+   ilerlemesi ile işin akıştaki adımı. Hangisi çizildiyse etiket onu söylüyor;
+   yoksa "%60" görüp bunu maç sonucu sanmak işten bile değil. */
+const STEP_PCT = { yeni:0, atandi:20, devam:60, tamam:100, odendi:100 };
+
+function ilerleme(r){
+  const t = tracker[r.id];
+  if(t && !t.paused && t.target_elo != null && t.current_elo != null){
+    const oran = eloProgress(t.start_elo, t.current_elo, t.target_elo);
+    const su = rankFromElo(t.current_elo);
+    return { oran, takip:true,
+      etiket: `${su ? su.label + ' · ' : ''}%${Math.round(oran*100)}` };
+  }
+  const bekliyor = t && t.paused ? 'duraklatıldı'
+                 : isTrackedGame(r.game) && r.riotId ? 'takip bekliyor' : 'takip yok';
+  return { oran: (STEP_PCT[r.durum] ?? 0) / 100, takip:false,
+           etiket: `${bekliyor} · ${STATUS_LABEL[r.durum] || r.durum}` };
+}
+
 /* --- Takip durumu ---------------------------------------------------------
 
    Panel üç durumu ayırt edemiyordu: bot kapalı, RLS okutmuyor, hiç takipli iş
@@ -141,8 +174,11 @@ function disMaliyetTL(r){
 const disKuruYok = r => isDis(r) && r.vendorCost > 0 && r.vendorCur !== 'TRY'
                         && !Number((finance[r.id] || {}).rate);
 
-function paraOzeti(){
-  const aktif = activeRecs();
+/* Liste dışarıdan verilebiliyor: Genel Bakış ve Siparişler oyun kapsamına
+   uyuyor, Ödemeler ekranı ise borcun tamamını göstermek için aktif işlerin
+   hepsini geçiriyor. */
+function paraOzeti(liste){
+  const aktif = liste || scopeRecs();
   const finansli = aktif.filter(r => hasFin(r.id));
   const brut = finansli.reduce((a,r) => a + brutTLof(r.id), 0);
   const netGelir = finansli.reduce((a,r) => a + netGelirTLof(r.id), 0);
