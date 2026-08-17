@@ -240,9 +240,12 @@ function editRecord(id){
   document.getElementById('not').value=r.not;formImage=r.image;
   toggleImageField();showFormImage();onTypeChange();
   document.getElementById('formTitle').textContent='Siparişi Düzenle';
+  document.getElementById('formSub').textContent='Kayıtlı sipariş — değiştirdiğin alanlar güncellenir.';
+  // Yapistir-cozumle yalnizca YENI siparis icin: mevcut bir kaydin alanlarini
+  // yapistirilan metinle ezmek sessiz veri kaybi olurdu.
+  document.querySelector('.paste-box')?.classList.add('hidden');
   document.getElementById('saveBtn').textContent='Güncelle';
   document.getElementById('cancelBtn').classList.remove('hidden');
-  window.scrollTo({top:0,behavior:'smooth'});
 }
 /* Tablo/pano modunda .wide form sütununu gizliyor. Forma dönen her yol
    (yeni sipariş butonu, düzenle, uyarıdan gelen bağlantı) buradan geçtiği
@@ -276,21 +279,32 @@ function onFulfilChange(){
   onRankChange();
 }
 
+/* Form artik modalda. Eskiden Siparisler'in sol sutunundaydi: liste alaninin
+   ucte birini kalici olarak yiyordu ve tablo/pano modunda gizlenmesi gerekiyordu
+   (o gizleme de yazilmakta olan veriyi siliyordu). Modalda o sinif hatalarin
+   tamami dusuyor - form ya aciktir ya kapali. */
 function showForm(){
   formAcik = true;
-  document.getElementById('tab-siparis')?.classList.remove('wide');
+  document.getElementById('formModal')?.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  document.getElementById('formPanel')?.scrollTo({ top:0 });
 }
-function hideFormIfWide(){
-  // Form acik degilse genis moda izin ver; acikken dokunma.
-  const grid = document.getElementById('tab-siparis'); if(!grid) return;
-  grid.classList.toggle('wide', ordersView.mode !== 'kart' && !formAcik);
+function hideForm(){
+  formAcik = false;
+  document.getElementById('formModal')?.classList.add('hidden');
+  // Drawer da acik olabilir; onun kilidini kaldirmayalim.
+  if(document.getElementById('drawer')?.classList.contains('hidden'))
+    document.body.style.overflow = '';
 }
+/* Eski cagri noktalari korunuyor; artik yapacak isi yok. */
+function hideFormIfWide(){}
 
 function resetForm(){
   // resetForm hem "iptal" hem "kayittan sonra" yolunda cagriliyor - ikisinde de
   // form KAPANIYOR. Kullanicinin formu acik tutmasi showForm() ile oluyor.
-  formAcik = false;
-  hideFormIfWide();
+  hideForm();
+  const pb=document.getElementById('pasteBox');
+  if(pb){ pb.value=''; onPasteChange(); }
   editId=null;formImage=null;
   ['payout','not','cost','platformRef','rate','jobDesc','riotId'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('orderType').value='rank';
@@ -403,6 +417,7 @@ function renderStats(){
 const ordersView = {
   mode:  lsGet('ordersMode', 'kart'),   // kart | tablo | pano
   durum: '',                            // '' = hepsi
+  src:   '',                            // '' = hepsi | ic | dis
   sel:   new Set(),                     // toplu seçim, sipariş id'leri
 };
 
@@ -412,6 +427,7 @@ function setOrdersView(mode){
   render();
 }
 function setOrdersDurum(d){ ordersView.durum = d; ordersView.sel.clear(); render(); }
+function setOrdersSrc(k){ ordersView.src = k; ordersView.sel.clear(); render(); }
 
 /* Genel Bakış ve bildirimler buradan süzüyor — kendi filtre mantığını
    kurmuyorlar, aksi hâlde aynı ekranda farklı sayılar çıkardı. */
@@ -434,6 +450,8 @@ function filterRecords(){
     if(fa === 'active' && r.archived) return false;
     if(fa === 'arch' && !r.archived) return false;
     if(!inScope(r)) return false;
+    if(ordersView.src === 'ic'  &&  isDis(r)) return false;
+    if(ordersView.src === 'dis' && !isDis(r)) return false;
     // 'acik' sanal bir durum: akışı bitmemiş işler. Genel Bakış'taki
     // "Açık sipariş" KPI'ı buna bağlı, yoksa tıklayınca farklı sayı çıkardı.
     if(ordersView.durum === 'acik'){ if(!isOpen(r)) return false; }
@@ -476,6 +494,24 @@ function renderStatusTabs(){
   box.innerHTML = tabs.map(([k, l]) =>
     `<button class="st-tab${k===ordersView.durum?' active':''}" onclick="setOrdersDurum('${esc(k)}')">
        ${esc(l)}<span class="st-n">${c[k] || 0}</span></button>`).join('');
+}
+
+/* Kaynak sekmeleri. Sayaclar kendi filtresini yok sayar (yoksa secili olmayan
+   sekme hep 0 gosterir), diger filtreleri sayar. Yalnizca admin gorur: booster
+   dis kaynak diye bir sey bilmiyor. */
+function renderSrcTabs(){
+  const box = document.getElementById('srcTabs'); if(!box) return;
+  if(!isAdmin()){ box.innerHTML = ''; box.classList.add('hidden'); return; }
+  const tut = ordersView.src; ordersView.src = '';
+  const hepsi = filterRecords(); ordersView.src = tut;
+  const dis = hepsi.filter(isDis).length;
+  // Hic dis kaynak isi yoksa sekmeler gurultu.
+  if(!dis && !tut){ box.innerHTML = ''; box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  const say = { '':hepsi.length, ic:hepsi.length - dis, dis };
+  box.innerHTML = [['','Tüm işler'], ['ic','Kendi ekibim'], ['dis','Dış kaynak']].map(([k,l]) =>
+    `<button class="st-tab${k===ordersView.src?' active':''}" onclick="setOrdersSrc('${esc(k)}')">
+       ${esc(l)}<span class="st-n">${say[k]}</span></button>`).join('');
 }
 
 function renderViewSwitch(){
@@ -774,6 +810,7 @@ async function boardDrop(e, durum){
 function render(){
   renderStats();
   renderStatusTabs();
+  renderSrcTabs();
   renderViewSwitch();
 
   const list = filterRecords();

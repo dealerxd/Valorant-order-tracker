@@ -314,22 +314,26 @@ with sync_playwright() as p:
     # Uc gorunum
     page.evaluate("setOrdersView('tablo')")
     check("tablo cizildi", page.eval_on_selector_all(".otable tbody tr", "e => e.length") == 5)
-    check("tablo modunda form gizli",
-          page.eval_on_selector("#formPanel", "e => getComputedStyle(e).display") == "none")
+    # Form artik modalda: gorunum modu ne olursa olsun liste tam genislikte,
+    # form yalnizca acildiginda ustte cikiyor.
+    check("form modali basta kapali",
+          page.eval_on_selector("#formModal", "e => getComputedStyle(e).display") == "none")
     check("form DOM'da duruyor", page.eval_on_selector_all("#formPanel", "e => e.length") == 1)
+    check("kapali modal tiklamalari yutmuyor",
+          page.evaluate(
+            "(() => {const e=document.elementFromPoint(innerWidth/2,innerHeight/2);"
+            " return !e || !e.closest('#formModal');})()"))
 
     page.evaluate("setOrdersView('pano')")
     check("pano sutunlari", page.eval_on_selector_all(".bcol", "e => e.length") == 4)
     page.evaluate("setOrdersView('kart')")
     check("kart gorunumune donuldu", page.eval_on_selector_all(".rec", "e => e.length") == 5)
-    check("kart modunda form geri geldi",
-          page.eval_on_selector("#formPanel", "e => getComputedStyle(e).display") != "none")
 
-    # newOrder tablo modundayken de forma goturmeli
+    # newOrder her gorunum modunda formu acmali
     page.evaluate("setOrdersView('tablo'); newOrder();")
-    check("yeni siparis butonu formu geri getiriyor",
-          page.eval_on_selector("#formPanel", "e => getComputedStyle(e).display") != "none")
-    page.evaluate("setOrdersView('kart')")
+    check("yeni siparis butonu formu aciyor",
+          page.eval_on_selector("#formModal", "e => getComputedStyle(e).display") != "none")
+    page.evaluate("hideForm(); setOrdersView('kart')")
 
     # Toplu secim gorunur listeye kirpilmali
     page.evaluate("selAll(true)")
@@ -498,16 +502,23 @@ with sync_playwright() as p:
     check("olmayan kayit drawer'i acmiyor",
           page.eval_on_selector("#drawer", "e => getComputedStyle(e).display") == "none")
 
-    # Tablo/pano modunda acik form render() ile kaybolmamali
+    # Acik form render() ile kaybolmamali (realtime tazelemesi yazilan veriyi silmesin)
     page.evaluate("setOrdersView('tablo'); newOrder();")
     page.evaluate("document.getElementById('not').value='yazmakta oldugum not'; render();")
     check("render acik formu gizlemiyor",
-          page.eval_on_selector("#formPanel", "e => getComputedStyle(e).display") != "none")
+          page.eval_on_selector("#formModal", "e => getComputedStyle(e).display") != "none")
     check("formdaki yazi korundu",
           page.eval_on_selector("#not", "e => e.value") == "yazmakta oldugum not")
     page.evaluate("resetForm(); render();")
-    check("form kapaninca genis mod geri geliyor",
-          page.eval_on_selector("#formPanel", "e => getComputedStyle(e).display") == "none")
+    check("form kapandi",
+          page.eval_on_selector("#formModal", "e => getComputedStyle(e).display") == "none")
+    # Escape zinciri: modal en ustteki katman.
+    page.evaluate("newOrder()")
+    page.keyboard.press("Escape")
+    check("Escape modali kapatiyor",
+          page.eval_on_selector("#formModal", "e => getComputedStyle(e).display") == "none")
+    check("modal kapaninca sayfa kaydirmasi geri geldi",
+          page.evaluate("document.body.style.overflow") == "")
     page.evaluate("setOrdersView('kart')")
 
     # Eski 'odendi' kayitlari panoda gorunmeli
@@ -778,6 +789,105 @@ with sync_playwright() as p:
             "fmt(netGelirTLof('C') - records[2].payout - disMaliyetTL(records[2]),'TRY')"),
           f"kart={kart_kar}")
     page.evaluate("setGameScope(''); delete finance.C; render();")
+
+    # --- Yapıştır-çözümle -------------------------------------------------
+    # Rank adları oyunlar arası çakışıyor; oyun ÖNCE tespit edilmezse
+    # "Platinum II" hem Rivals hem Rocket League merdiveninde bulunur.
+    p1 = page.evaluate("JSON.stringify(pasteParse("
+                       "'Valorant Gold 1 to Diamond 1 boost, 120$, Sylas#TR1, TR, 42 RR, Eldorado'))")
+    import json as _json
+    d1 = _json.loads(p1)
+    check("yapistir: oyun", d1.get("game") == "valorant", p1)
+    check("yapistir: rank araligi",
+          d1.get("baslangic") == "Gold 1" and d1.get("hedef") == "Diamond 1", p1)
+    check("yapistir: fiyat ve birim", d1.get("cost") == 120 and d1.get("currency") == "USD", p1)
+    check("yapistir: Riot ID", d1.get("riotId") == "Sylas#TR1", p1)
+    check("yapistir: bolge", d1.get("region") == "TR", p1)
+    check("yapistir: RR", d1.get("startRR") == 42, p1)
+    check("yapistir: pazaryeri", d1.get("platform") == "Eldorado", p1)
+
+    d2 = _json.loads(page.evaluate(
+        "JSON.stringify(pasteParse('Rocket League Platinum II -> Diamond II, 64 EUR, GameBoost'))"))
+    check("yapistir: RL oyunu taniniyor", d2.get("game") == "rl", str(d2))
+    check("yapistir: RL rankleri kendi merdiveninden",
+          d2.get("baslangic") == "Platinum II" and d2.get("hedef") == "Diamond II", str(d2))
+    check("yapistir: EUR", d2.get("currency") == "EUR" and d2.get("cost") == 64, str(d2))
+    # Takip edilmeyen oyunda Riot ID alanı yok — bot o siparişi yoklamıyor.
+    d3 = _json.loads(page.evaluate(
+        "JSON.stringify(pasteParse('Marvel Rivals Gold I to Diamond I, Strange#TR1'))"))
+    check("yapistir: takipsiz oyunda Riot ID yazilmiyor", "riotId" not in d3, str(d3))
+
+    d4 = _json.loads(page.evaluate(
+        "JSON.stringify(pasteParse('Ascendant 2 8 net win soloq duo, 1.250 TL'))"))
+    check("yapistir: net win turu", d4.get("orderType") == "netwin", str(d4))
+    check("yapistir: adet", d4.get("unitCount") == 8, str(d4))
+    check("yapistir: binlik ayraci", d4.get("cost") == 1250 and d4.get("currency") == "TRY", str(d4))
+    check("yapistir: extralar", sorted(d4.get("extras", [])) == ["duo", "soloq"], str(d4))
+
+    # En uzun rank eşleşmesi kazanmalı: "Grand Champion III" içinde
+    # "Champion III" de var, kısası seçilirse iş bir kademe aşağı iner.
+    d5 = _json.loads(page.evaluate(
+        "JSON.stringify(pasteParse('rocket league Champion I to Grand Champion III'))"))
+    check("yapistir: en uzun rank eslesmesi kazaniyor",
+          d5.get("hedef") == "Grand Champion III", str(d5))
+
+    check("yapistir: bos metin cozumlenmiyor", page.evaluate("pasteParse('   ') === null"))
+    check("yapistir: alakasiz metin cozumlenmiyor",
+          page.evaluate("pasteParse('merhaba nasilsin') === null"),
+          page.evaluate("JSON.stringify(pasteParse('merhaba nasilsin'))"))
+
+    # Forma yazma: SESSİZ değil, ayrı bir onay adımı var.
+    page.evaluate("me={id:'admin1',role:'admin',display_name:'Rex'}; buildTabs(); applyRoleUI(); newOrder();")
+    page.evaluate("""
+      document.getElementById('pasteBox').value =
+        'Valorant Gold 1 to Diamond 1 boost, 120$, Sylas#TR1, TR, 42 RR, Eldorado';
+      onPasteChange();
+    """)
+    page.wait_for_timeout(120)
+    check("yapistir: cipler cizildi",
+          page.eval_on_selector_all("#pasteOut .chip", "e => e.length") >= 6,
+          str(page.eval_on_selector_all("#pasteOut .chip", "e => e.length")))
+    check("yapistir: onaydan once form bos",
+          page.eval_on_selector("#riotId", "e => e.value") == "")
+    page.evaluate("pasteUygula()")
+    check("yapistir: rank alanlari dolduruldu",
+          page.eval_on_selector("#baslangic", "e => e.value") == "Gold 1"
+          and page.eval_on_selector("#hedef", "e => e.value") == "Diamond 1")
+    check("yapistir: Riot ID dolduruldu",
+          page.eval_on_selector("#riotId", "e => e.value") == "Sylas#TR1")
+    check("yapistir: fiyat dolduruldu",
+          page.eval_on_selector("#cost", "e => e.value") == "120"
+          and page.eval_on_selector("#currency", "e => e.value") == "USD")
+    check("yapistir: RR dolduruldu", page.eval_on_selector("#startRR", "e => e.value") == "42")
+    # Düzenlemede yapıştır kutusu olmamalı: kayıtlı alanları sessizce ezerdi.
+    page.evaluate("hideForm(); editRecord(records[0].id);")
+    check("duzenlemede yapistir kutusu gizli",
+          page.eval_on_selector(".paste-box", "e => getComputedStyle(e).display") == "none")
+    page.evaluate("resetForm(); render();")
+
+    # --- Kaynak sekmeleri -------------------------------------------------
+    page.evaluate("me={id:'admin1',role:'admin',display_name:'Rex'}; applyRoleUI(); render();")
+    page.wait_for_timeout(120)
+    check("kaynak sekmeleri cizildi",
+          page.eval_on_selector_all("#srcTabs .st-tab", "e => e.length") == 3,
+          str(page.eval_on_selector_all("#srcTabs .st-tab", "e => e.map(x=>x.textContent.trim())")))
+    hepsi = page.evaluate("filterRecords().length")
+    page.evaluate("setOrdersSrc('dis')")
+    check("dis kaynak sekmesi suzuyor",
+          page.evaluate("filterRecords().every(isDis)")
+          and page.evaluate("filterRecords().length") == 2,
+          str(page.evaluate("filterRecords().length")))
+    page.evaluate("setOrdersSrc('ic')")
+    check("ic kaynak sekmesi suzuyor",
+          page.evaluate("filterRecords().every(r => !isDis(r))"))
+    page.evaluate("setOrdersSrc('')")
+    check("kaynak sekmesi temizlenince hepsi geri geldi",
+          page.evaluate("filterRecords().length") == hepsi)
+    # Booster dış kaynak diye bir şey bilmiyor.
+    page.evaluate("me={id:'b1',role:'booster',display_name:'Ali'}; applyRoleUI(); render();")
+    check("booster kaynak sekmelerini gormuyor",
+          page.eval_on_selector_all("#srcTabs .st-tab", "e => e.length") == 0)
+    page.evaluate("me={id:'admin1',role:'admin',display_name:'Rex'}; buildTabs(); applyRoleUI(); render();")
 
     browser.close()
 

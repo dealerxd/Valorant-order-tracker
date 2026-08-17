@@ -200,6 +200,8 @@ document.addEventListener('click', e => {
    hem arama kutusunu siliyordu. */
 document.addEventListener('keydown', e => {
   if(e.key !== 'Escape') return;
+  const modal = document.getElementById('formModal');
+  if(modal && !modal.classList.contains('hidden')){ hideForm(); return; }
   const drawer = document.getElementById('drawer');
   if(drawer && !drawer.classList.contains('hidden')){ closeDetail(); return; }
   const pop = document.getElementById('notifPop');
@@ -208,14 +210,28 @@ document.addEventListener('keydown', e => {
   if(s && s.value){ s.value = ''; render(); }
 });
 
-/* --- Yeni sipariş ---------------------------------------------------------
-   Tablo/pano modunda form gizli olabiliyor; butonun onu geri getirmesi
-   gerekiyor. resetForm() zaten görünürlüğü ayarlıyor (bkz. orders.js). */
+/* --- Yeni sipariş --------------------------------------------------------- */
 function newOrder(){
   switchTab('siparis');
-  resetForm();      // alanlari temizler ve formAcik'i false yapar
-  showForm();       // ...sonra kullanici icin acik tutar (tablo/pano modunda sart)
-  document.getElementById('formPanel')?.scrollIntoView({ behavior:'smooth', block:'start' });
+  resetForm();      // alanlari temizler ve modali kapatir
+  document.querySelector('.paste-box')?.classList.toggle('hidden', !isAdmin());
+  document.getElementById('formSub').textContent = isAdmin()
+    ? 'Yapıştır, kontrol et, kaydet.'
+    : 'İşini kendin ekle — ücretin fiyat listesinden gelir.';
+  showForm();       // ...sonra kullanici icin acar
+}
+
+/* --- Toast ---------------------------------------------------------------
+   alert() akisi kesiyor ve mobilde cirkin; bilgi mesajlari icin kisa omurlu
+   bir seri kullaniyoruz. Hata yollari alert()/confirm()'te KALIYOR: onlarin
+   goruldugunden emin olmak gerek. */
+let toastT = null;
+function toast(metin, tur){
+  const el = document.getElementById('toast'); if(!el) return;
+  el.textContent = metin;
+  el.className = 'toast' + (tur ? ' ' + tur : '');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
 /* --- Rol arayüzü ---------------------------------------------------------- */

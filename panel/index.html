@@ -99,9 +99,128 @@
   <div id="tab-odeme" class="hidden"><div id="odemeBody"></div></div>
 
   <!-- SİPARİŞLER -->
-  <div id="tab-siparis" class="grid hidden">
-    <div class="panel" id="formPanel">
-      <h2><span class="bar"></span><span id="formTitle">Yeni Sipariş</span></h2>
+  <div id="tab-siparis" class="hidden">
+    <div class="toolbar">
+      <div class="status-tabs" id="statusTabs"></div>
+      <div class="status-tabs" id="srcTabs"></div>
+      <div class="view-switch" id="viewSwitch"></div>
+      <select id="filterBooster" onchange="render()"></select>
+      <select id="filterArchive" onchange="render()"><option value="active">Aktifler</option><option value="arch">Arşiv</option><option value="all">Hepsi</option></select>
+    </div>
+    <div class="bulk-bar hidden" id="bulkBar"></div>
+    <div id="recordList"></div>
+  </div>
+
+  <!-- RAPOR -->
+  <div id="tab-rapor" class="panel hidden">
+    <h2><span class="bar"></span>Rapor</h2>
+    <div class="toolbar">
+      <label style="font-size:12px;color:var(--muted)">Başlangıç <input type="date" id="repFrom" onchange="renderReport()"></label>
+      <label style="font-size:12px;color:var(--muted)">Bitiş <input type="date" id="repTo" onchange="renderReport()"></label>
+      <button class="icon-btn" onclick="clearReportDates()">Tümü</button>
+    </div>
+    <div id="reportBody"></div>
+  </div>
+
+  <!-- ARŞİV -->
+  <div id="tab-arsiv" class="panel hidden">
+    <h2><span class="bar"></span>Arşiv</h2>
+    <div class="toolbar">
+      <select id="arcPanel" onchange="renderArchive()">
+        <option value="">Tüm Paneller</option>
+        <option value="Eldorado">Eldorado</option>
+        <option value="GameBoost">GameBoost</option>
+        <option value="Diğer">Diğer</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto"><div id="archiveBody"></div></div>
+  </div>
+
+  <!-- BOOSTERLAR -->
+  <div id="tab-boosterlar" class="panel hidden">
+    <h2><span class="bar"></span>Boosterlar & Davet</h2>
+    <div class="invite-box">
+      <div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Yeni davet kodu</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="invite-code" id="newCode">— — —</span>
+          <button class="icon-btn" onclick="copyCode()">Kopyala</button>
+        </div>
+      </div>
+      <button class="btn btn-gold btn-sm" style="width:auto" onclick="genInvite()">+ Kod Üret</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Kodu booster'a ver; o kayıt olurken girsin. Her kod tek kullanımlık. Kodla giren otomatik aktif olur.</p>
+    <div id="inviteList" style="margin-bottom:20px"></div>
+    <div id="boosterList"></div>
+  </div>
+
+  <!-- HESAPLAYICI -->
+  <div id="tab-hesap" class="panel hidden" style="max-width:680px">
+    <h2><span class="bar"></span>Fiyat Hesaplayıcı</h2>
+    <div class="two">
+      <div class="field"><label>From</label><select id="cFrom" onchange="calcRender()"></select></div>
+      <div class="field"><label>To</label><select id="cTo" onchange="calcRender()"></select></div>
+    </div>
+    <div class="two">
+      <div class="field"><label>Bölge</label><select id="cRegion" data-region onchange="calcRender()"></select></div>
+      <div class="field"><label>Başlangıç RR</label><input type="number" id="cRR" min="0" max="99" value="0" oninput="calcRender()"></div>
+    </div>
+    <div class="extra-pills" style="margin-bottom:10px" id="calcExtras"></div>
+    <div class="toggles" style="margin:0 0 10px">
+      <label class="tg"><input type="checkbox" id="cExtraWin" onchange="calcRender()"><span class="sw"></span>Extra Win <b>+1 win (hedef rankta)</b></label>
+    </div>
+    <div id="offerBox"></div>
+  </div>
+
+  <!-- PROFİL -->
+  <div id="tab-profil" class="panel hidden" style="max-width:520px">
+    <h2><span class="bar"></span>Profilim</h2>
+    <div class="two">
+      <div class="field"><label>Ad Soyad</label><input type="text" id="pfName" placeholder="Ad Soyad"></div>
+      <div class="field"><label>Telefon</label><input type="text" id="pfPhone" placeholder="05xx xxx xx xx"></div>
+    </div>
+    <div class="field"><label>Discord</label><input type="text" id="pfDiscord" placeholder="kullanıcı adı"></div>
+    <div class="field"><label>IBAN</label><input type="text" id="pfIban" placeholder="TR__ ____ ____ ____ ____ ____ __"></div>
+    <div class="field"><label>Crypto Adresi</label><input type="text" id="pfCrypto" placeholder="cüzdan adresi (ağı da yaz: TRC20, ERC20...)"></div>
+    <div class="auth-msg" id="pfMsg"></div>
+    <button class="btn btn-gold" onclick="saveProfile()">Kaydet</button>
+  </div>
+
+  <!-- FİYAT LİSTESİ (düzenlenebilir) -->
+  <div id="tab-fiyat" class="panel hidden">
+    <h2><span class="bar"></span>Booster Fiyat Listesi</h2>
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px" id="fiyatHint"></p>
+    <div id="priceTables"></div>
+  </div>
+
+    </div><!-- /.page -->
+  </div><!-- /.main -->
+
+  <div class="toast hidden" id="toast"></div>
+  <div class="lightbox hidden" id="lightbox" onclick="closeLightbox()"><img id="lightboxImg" alt=""></div>
+<!-- YENİ SİPARİŞ — modal.
+     Form eskiden Siparişler'in sol sütununda duruyordu; liste alanının
+     üçte birini kalıcı olarak yiyordu ve tablo/pano modunda gizlenmesi
+     gerekiyordu. Artık üstte açılıyor, liste hep tam genişlikte. -->
+<div class="modal hidden" id="formModal" onclick="if(event.target===this) hideForm()">
+  <div class="panel modal-card" id="formPanel">
+    <div class="modal-h">
+      <div>
+        <h2><span class="bar"></span><span id="formTitle">Yeni Sipariş</span></h2>
+        <div class="modal-sub" id="formSub">Yapıştır, kontrol et, kaydet.</div>
+      </div>
+      <button class="icon-btn" onclick="hideForm()" title="Kapat (Esc)">✕</button>
+    </div>
+
+    <!-- Yapıştır-çözümle: pazaryerinden/Discord'dan gelen metni okuyup
+         alanları dolduruyor. Tahmin ettiği her alan çip olarak gösteriliyor —
+         sessizce doldurup yanlış kaydetmesin diye onaylatıyoruz. -->
+    <div class="field paste-box admin-only">
+      <label>Sipariş metnini yapıştır <span style="opacity:.55;font-weight:400">— alanları kendi doldursun</span></label>
+      <textarea id="pasteBox" rows="3" placeholder="Eldorado/GameBoost/Discord mesajını buraya yapıştır…" oninput="onPasteChange()"></textarea>
+      <div class="paste-out hidden" id="pasteOut"></div>
+    </div>
+
 
       <div class="two">
         <div class="field"><label>Oyun</label>
@@ -212,105 +331,9 @@
       <div class="field"><label>Not</label><textarea id="not" placeholder="Detay, teslim notu..."></textarea></div>
       <button class="btn btn-gold" id="saveBtn" onclick="saveRecord()">Kaydet</button>
       <button class="btn btn-ghost hidden" id="cancelBtn" onclick="resetForm()" style="width:100%;margin-top:8px">İptal</button>
-    </div>
-    <div>
-      <div class="toolbar">
-        <div class="status-tabs" id="statusTabs"></div>
-        <div class="view-switch" id="viewSwitch"></div>
-        <select id="filterBooster" onchange="render()"></select>
-        <select id="filterArchive" onchange="render()"><option value="active">Aktifler</option><option value="arch">Arşiv</option><option value="all">Hepsi</option></select>
-      </div>
-      <div class="bulk-bar hidden" id="bulkBar"></div>
-      <div id="recordList"></div>
-    </div>
   </div>
+</div>
 
-  <!-- RAPOR -->
-  <div id="tab-rapor" class="panel hidden">
-    <h2><span class="bar"></span>Rapor</h2>
-    <div class="toolbar">
-      <label style="font-size:12px;color:var(--muted)">Başlangıç <input type="date" id="repFrom" onchange="renderReport()"></label>
-      <label style="font-size:12px;color:var(--muted)">Bitiş <input type="date" id="repTo" onchange="renderReport()"></label>
-      <button class="icon-btn" onclick="clearReportDates()">Tümü</button>
-    </div>
-    <div id="reportBody"></div>
-  </div>
-
-  <!-- ARŞİV -->
-  <div id="tab-arsiv" class="panel hidden">
-    <h2><span class="bar"></span>Arşiv</h2>
-    <div class="toolbar">
-      <select id="arcPanel" onchange="renderArchive()">
-        <option value="">Tüm Paneller</option>
-        <option value="Eldorado">Eldorado</option>
-        <option value="GameBoost">GameBoost</option>
-        <option value="Diğer">Diğer</option>
-      </select>
-    </div>
-    <div style="overflow-x:auto"><div id="archiveBody"></div></div>
-  </div>
-
-  <!-- BOOSTERLAR -->
-  <div id="tab-boosterlar" class="panel hidden">
-    <h2><span class="bar"></span>Boosterlar & Davet</h2>
-    <div class="invite-box">
-      <div>
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Yeni davet kodu</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <span class="invite-code" id="newCode">— — —</span>
-          <button class="icon-btn" onclick="copyCode()">Kopyala</button>
-        </div>
-      </div>
-      <button class="btn btn-gold btn-sm" style="width:auto" onclick="genInvite()">+ Kod Üret</button>
-    </div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Kodu booster'a ver; o kayıt olurken girsin. Her kod tek kullanımlık. Kodla giren otomatik aktif olur.</p>
-    <div id="inviteList" style="margin-bottom:20px"></div>
-    <div id="boosterList"></div>
-  </div>
-
-  <!-- HESAPLAYICI -->
-  <div id="tab-hesap" class="panel hidden" style="max-width:680px">
-    <h2><span class="bar"></span>Fiyat Hesaplayıcı</h2>
-    <div class="two">
-      <div class="field"><label>From</label><select id="cFrom" onchange="calcRender()"></select></div>
-      <div class="field"><label>To</label><select id="cTo" onchange="calcRender()"></select></div>
-    </div>
-    <div class="two">
-      <div class="field"><label>Bölge</label><select id="cRegion" data-region onchange="calcRender()"></select></div>
-      <div class="field"><label>Başlangıç RR</label><input type="number" id="cRR" min="0" max="99" value="0" oninput="calcRender()"></div>
-    </div>
-    <div class="extra-pills" style="margin-bottom:10px" id="calcExtras"></div>
-    <div class="toggles" style="margin:0 0 10px">
-      <label class="tg"><input type="checkbox" id="cExtraWin" onchange="calcRender()"><span class="sw"></span>Extra Win <b>+1 win (hedef rankta)</b></label>
-    </div>
-    <div id="offerBox"></div>
-  </div>
-
-  <!-- PROFİL -->
-  <div id="tab-profil" class="panel hidden" style="max-width:520px">
-    <h2><span class="bar"></span>Profilim</h2>
-    <div class="two">
-      <div class="field"><label>Ad Soyad</label><input type="text" id="pfName" placeholder="Ad Soyad"></div>
-      <div class="field"><label>Telefon</label><input type="text" id="pfPhone" placeholder="05xx xxx xx xx"></div>
-    </div>
-    <div class="field"><label>Discord</label><input type="text" id="pfDiscord" placeholder="kullanıcı adı"></div>
-    <div class="field"><label>IBAN</label><input type="text" id="pfIban" placeholder="TR__ ____ ____ ____ ____ ____ __"></div>
-    <div class="field"><label>Crypto Adresi</label><input type="text" id="pfCrypto" placeholder="cüzdan adresi (ağı da yaz: TRC20, ERC20...)"></div>
-    <div class="auth-msg" id="pfMsg"></div>
-    <button class="btn btn-gold" onclick="saveProfile()">Kaydet</button>
-  </div>
-
-  <!-- FİYAT LİSTESİ (düzenlenebilir) -->
-  <div id="tab-fiyat" class="panel hidden">
-    <h2><span class="bar"></span>Booster Fiyat Listesi</h2>
-    <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px" id="fiyatHint"></p>
-    <div id="priceTables"></div>
-  </div>
-
-    </div><!-- /.page -->
-  </div><!-- /.main -->
-
-  <div class="lightbox hidden" id="lightbox" onclick="closeLightbox()"><img id="lightboxImg" alt=""></div>
 </div><!-- /#app.shell -->
 
 <!-- Sipariş detay drawer'ı: içeriği detail.js dolduruyor -->
@@ -326,6 +349,7 @@
 <script src="js/auth.js"></script>
 <script src="js/data.js"></script>
 <script src="js/orders.js"></script>
+<script src="js/paste.js"></script>
 <script src="js/detail.js"></script>
 <script src="js/overview.js"></script>
 <script src="js/payments.js"></script>
