@@ -1,8 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    { "path": "/api/ingest/eldorado", "schedule": "*/15 * * * *" },
-    { "path": "/api/ingest/gameboost", "schedule": "*/15 * * * *" },
     { "path": "/api/fx", "schedule": "0 7 * * *" }
   ]
 }

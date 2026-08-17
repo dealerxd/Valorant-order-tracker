@@ -26,6 +26,46 @@ and publishable key are already filled in — the rest are secrets you supply:
 | `ELDORADO_API_KEY`, `GAMEBOOST_API_KEY` | marketplace ingest (see *Not wired up*) |
 | `TRACK_LINK_SECRET` | HMAC for the customer `/track/[token]` links (surface not built) |
 
+## Deploying to Vercel
+
+The Vercel project must be created from the git repo with **root directory
+`panel-v2`** — the repo also holds `panel/`, `tracker/` and `shared/`, so a
+root-level build finds no Next.js app.
+
+One-time setup:
+
+1. Install the [Vercel GitHub App](https://github.com/apps/vercel) on
+   `dealerxd/Valorant-order-tracker`. Without it Vercel cannot link the repo.
+2. New Project → import the repo → set **Root Directory** to `panel-v2`.
+   Framework detection (Next.js) and the build command are correct by default.
+3. Add the environment variables below, for Production *and* Preview.
+4. Until this branch is merged, production tracks `main`, which has no
+   `panel-v2/` yet — deploy from the `panel-v2` branch, or merge first.
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://yhrvpgkxywwgeelhjszb.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_zwHVMn87dm7xJ1aB-_p7Xg_iUypsY-L` |
+| `SUPABASE_SERVICE_ROLE_KEY` | from Supabase → Settings → API (secret) |
+| `CRON_SECRET` | any long random string (secret) |
+| `FX_API_KEY` | optional; blank uses the keyless provider |
+| `TRACK_LINK_SECRET` | only needed once `/track/[token]` exists |
+
+The first two are **required for the app to boot** — they are inlined into the
+client bundle at build time, so a deploy without them builds green and then
+500s on every page. They are not secrets (the anon key is the publishable
+one, already in `.env.example` and the prototype).
+
+`ELDORADO_API_KEY` / `GAMEBOOST_API_KEY` are pointless until the ingest routes
+are implemented; they return 501 regardless.
+
+### Cron
+
+`vercel.json` schedules **only** `/api/fx`, daily. The two marketplace ingest
+crons were removed: those endpoints return 501, so scheduling them just burns
+invocations — and three crons at `*/15` exceeds the Hobby plan's limit (2 jobs,
+once-daily), which fails the deploy outright. Add them back with the ingest.
+
 ## The migration — already applied
 
 `shared/migrations/005_panel_v2_eklentileri.sql` has been applied to the live project
