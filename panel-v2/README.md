@@ -32,15 +32,15 @@ The Vercel project must be created from the git repo with **root directory
 `panel-v2`** — the repo also holds `panel/`, `tracker/` and `shared/`, so a
 root-level build finds no Next.js app.
 
-One-time setup:
+The project already exists: **`resell-bot-panel-v2`**
+(`prj_bNDYKPc7UpDrRwgk1smXQzGnPnt8`), linked to the repo with root directory
+`panel-v2` and Node 24.x. What is left:
 
-1. Install the [Vercel GitHub App](https://github.com/apps/vercel) on
-   `dealerxd/Valorant-order-tracker`. Without it Vercel cannot link the repo.
-2. New Project → import the repo → set **Root Directory** to `panel-v2`.
-   Framework detection (Next.js) and the build command are correct by default.
-3. Add the environment variables below, for Production *and* Preview.
-4. Until this branch is merged, production tracks `main`, which has no
-   `panel-v2/` yet — deploy from the `panel-v2` branch, or merge first.
+1. Add the environment variables below in the Vercel dashboard, for
+   Production *and* Preview. Nothing else blocks a working deploy.
+2. Production tracks `main`, which has no `panel-v2/` until PR #7 merges.
+   Until then only `panel-v2`-branch previews build; a production deploy
+   would fail with "root directory does not exist".
 
 | Variable | Value |
 |---|---|
