@@ -32,6 +32,10 @@ export interface Order {
   vcost: number;
   vcur: Currency;
   vpaid: boolean;
+  /** Profit-share partner recorded on this order; null = wholly reXs'. */
+  partner: string | null;
+  /** The partner's percentage, frozen when the order was created. */
+  partnerPct: number;
   status: Status;
   cost: number;
   cur: Currency;
@@ -112,14 +116,18 @@ export const costTL = (o: Pick<Order, 'fulfil' | 'vcost' | 'vcur' | 'rate' | 'pa
 export const profit = (o: Order) => netRevenue(o) - costTL(o);
 
 /* ---- partnerships -------------------------------------------------------
-   Orders are split two ways by where they came from:
+   Some orders are shared with an outside partner, who takes a cut of the
+   remaining profit. Today that is TZX at 50% on Eldorado jobs; GameBoost is
+   wholly reXs'.
 
-     GameBoost  -> 100% reXs
-     Eldorado   -> 50/50 reXs / TZX, on the remaining profit
+   This is stored per order (resells.partner / partner_pct), NOT derived from
+   the marketplace. Two reasons:
+     - historic Eldorado orders predate the TZX deal and are 100% reXs';
+     - freezing the percentage means renegotiating the deal cannot silently
+       rewrite what past orders were worth, the same way order_finance.rate
+       freezes the exchange rate.
 
-   The partner is derived from the marketplace, not stored per order, so
-   there is nothing to keep in sync. Adding a partner later means one entry
-   here. A loss splits the same way a gain does. */
+   PARTNER_DEFAULTS only seeds the New Order form. A loss splits like a gain. */
 
 export interface PartnerRule {
   name: string;
@@ -127,14 +135,19 @@ export interface PartnerRule {
   sharePct: number;
 }
 
-export const PARTNERS: Record<string, PartnerRule> = {
+/** Marketplace -> the partnership to pre-select for a NEW order. Changing
+    this never touches orders that already exist. */
+export const PARTNER_DEFAULTS: Record<string, PartnerRule> = {
   Eldorado: { name: 'TZX', sharePct: 50 },
 };
 
-export const partnerOf = (o: Pick<Order, 'platform'>): PartnerRule | null =>
-  PARTNERS[o.platform] ?? null;
+/** The partnership recorded on this order, or null when it is wholly ours. */
+export function partnerOf(o: Pick<Order, 'partner' | 'partnerPct'>): PartnerRule | null {
+  if (!o.partner) return null;
+  return { name: o.partner, sharePct: o.partnerPct };
+}
 
-/** The partner's cut of this order, 0 when it is wholly ours. */
+/** The partner's cut, 0 when the order is wholly ours. */
 export function partnerShare(o: Order): number {
   const p = partnerOf(o);
   return p ? Math.round(profit(o) * p.sharePct / 100) : 0;
@@ -143,8 +156,9 @@ export function partnerShare(o: Order): number {
 /** What actually lands with reXs after the partner takes their cut. */
 export const ownProfit = (o: Order) => profit(o) - partnerShare(o);
 
-/** Bucket label for grouping and filtering. */
-export const partnerBucket = (o: Pick<Order, 'platform'>) => partnerOf(o)?.name ?? 'own';
+/** Bucket key for grouping and filtering: 'own' or the partner's name. */
+export const partnerBucket = (o: Pick<Order, 'partner' | 'partnerPct'>) =>
+  partnerOf(o)?.name ?? 'own';
 
 /** 0-100. Tracked rank jobs use the ladder position; everything else falls
     back to the status, because nobody reports partial progress there. */

@@ -51,7 +51,7 @@ export default async function OverviewPage({
       { label: 'Gross Revenue (TL)', value: TL(gross), hint: `this period · ${withFinance.length} jobs with finance`, color: C.gold, gradient: '160deg,#d4af37,#b8962f' },
       { label: 'Net Profit', value: TL(net), hint: partnerCut ? 'yours, after fees, payouts and partner cuts' : 'after fees and payouts', color: C.green, gradient: '160deg,#3ecf8e,#2f9e6c' },
       ...(partnerCut ? [
-        { label: 'TZX Share', value: TL(partnerCut), hint: `50% of remaining profit on ${withFinance.filter((o) => partnerOf(o)).length} Eldorado jobs`, color: C.blue, gradient: '160deg,#5a9ded,#3a6ea8' },
+        { label: 'TZX Share', value: TL(partnerCut), hint: `partner cut on ${withFinance.filter((o) => partnerOf(o)).length} shared jobs`, color: C.blue, gradient: '160deg,#5a9ded,#3a6ea8' },
       ] : []),
       { label: 'Booster Debt', value: TL(debt), hint: `${boosters.filter((b) => b.debt > 0).length} boosters awaiting payment`, color: C.red, gradient: '160deg,#e25555,#a83c3c' },
     ] : []),
@@ -86,9 +86,10 @@ export default async function OverviewPage({
   // GameBoost (wholly ours) vs Eldorado (50/50 with TZX). Buckets with no
   // orders are dropped so the panel does not show an empty TZX row before
   // the first partnered job exists.
+  const sharedPct = orders.find((o) => partnerBucket(o) === 'TZX')?.partnerPct ?? 50;
   const partnerStats: PartnerStat[] = [
-    { key: 'own', label: 'GameBoost · wholly yours', sub: '100% of the remaining profit is yours', color: C.gold },
-    { key: 'TZX', label: 'Eldorado · shared with TZX', sub: '50% of the remaining profit goes to TZX', color: C.blue },
+    { key: 'own', label: 'Wholly yours', sub: '100% of the remaining profit', color: C.gold },
+    { key: 'TZX', label: 'Shared with TZX', sub: `${sharedPct}% of the remaining profit goes to TZX`, color: C.blue },
   ]
     .map((b) => {
       const list = orders.filter((o) => partnerBucket(o) === b.key);

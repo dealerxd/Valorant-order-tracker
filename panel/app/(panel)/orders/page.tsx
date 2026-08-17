@@ -67,12 +67,13 @@ export default async function OrdersPage({
     { value: 'external', label: 'Outsourced', count: extCount },
   ];
 
-  // The two-way ownership split. Admin-only: it is a finance lens.
-  const tzxCount = inGame.filter((o) => partnerBucket(o) === 'TZX').length;
+  // The ownership split. Admin-only: it is a finance lens. Only rendered
+  // once at least one shared order exists.
+  const sharedCount = inGame.filter((o) => partnerBucket(o) !== 'own').length;
   const partnerTabs: Tab[] = [
     { value: '', label: 'All', count: inGame.length },
-    { value: 'own', label: 'GameBoost · 100% you', count: inGame.length - tzxCount },
-    { value: 'TZX', label: 'TZX · 50/50', count: tzxCount },
+    { value: 'own', label: '100% you', count: inGame.length - sharedCount },
+    { value: 'TZX', label: 'TZX shared', count: sharedCount },
   ];
 
   return (
@@ -83,7 +84,7 @@ export default async function OrdersPage({
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <FilterTabs param="status" tabs={statusTabs} current={status} variant="status" />
             <FilterTabs param="src" tabs={srcTabs} current={src} />
-            {isAdmin && <FilterTabs param="partner" tabs={partnerTabs} current={partner} />}
+            {isAdmin && sharedCount > 0 && <FilterTabs param="partner" tabs={partnerTabs} current={partner} />}
             <ViewSwitcher current={view} />
           </div>
 

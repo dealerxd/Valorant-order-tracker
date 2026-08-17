@@ -66,6 +66,8 @@ interface ResellRow {
   vendor_cost: number | null;
   vendor_currency: string | null;
   vendor_paid: boolean | null;
+  partner: string | null;
+  partner_pct: number | null;
   /* Real lifecycle timestamps the database already keeps — preferred over
      guessing from created_at. */
   assigned_at: string | null;
@@ -181,6 +183,9 @@ function mapOrder(
         ? ((legacy[3].trim() || '$') as Currency)
         : '$',
     vpaid: hasVendorCol ? !!r.vendor_paid : legacy ? legacy[4] === '1' : false,
+    // Null on every order that predates the TZX deal — those stay 100% reXs'.
+    partner: r.partner?.trim() || null,
+    partnerPct: Number(r.partner_pct) || 0,
     status: (r.durum === 'odendi' ? 'tamam' : (r.durum || 'yeni')) as Status,
     cost: Number(fin.cost) || 0,
     cur,

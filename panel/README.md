@@ -147,29 +147,48 @@ specify the edit form.
 
 ## Ownership split (reXs / TZX)
 
-Orders divide two ways, derived from the marketplace — there is no extra
-column and nothing to keep in sync:
+Orders divide two ways by who shares the profit:
 
-| Marketplace | Remaining profit |
+| Bucket | Remaining profit |
 |---|---|
-| GameBoost | 100% reXs |
-| Eldorado | 50% reXs / 50% TZX |
+| wholly yours | 100% reXs |
+| shared | 50% reXs / 50% TZX |
 
 "Remaining profit" is `netRevenue − costTL`: the marketplace commission and
 whoever fulfilled the job (own booster payout, or the outsourced seller's
 amount converted to TL) are both already out. A loss splits the same way a
 gain does.
 
-It lives in `lib/model.ts` as `PARTNERS` / `partnerOf()` / `partnerShare()` /
-`ownProfit()`. Adding a partner, or changing a percentage, is one entry in
-`PARTNERS`. Where it surfaces:
+**The partnership is stored on the order** (`resells.partner`,
+`resells.partner_pct`), not derived from the marketplace. That matters:
+
+- Every order that existed when this shipped predates the TZX deal, so all
+  of them — including the three historic Eldorado jobs — stay 100% yours.
+  Deriving from the marketplace would have retroactively handed TZX half of
+  ₺1.127.
+- The percentage is frozen on the row, so renegotiating the split later
+  cannot rewrite what past orders were worth.
+
+`PARTNER_DEFAULTS` in `lib/model.ts` maps a marketplace to the partnership
+the **New Order form pre-selects** (Eldorado → TZX 50%). It never
+reinterprets a stored order, and the admin can override or clear it per
+order — once touched by hand, changing the marketplace stops overwriting it.
+Boosters cannot set it at all.
+
+Read it with `partnerOf()` / `partnerShare()` / `ownProfit()`. Where it
+surfaces:
 
 - **Overview** — `Net Profit` is now *your* share, with a separate `TZX Share`
   KPI, plus an **Ownership** panel breaking the two buckets out.
-- **Orders** — a partner filter (All / GameBoost 100% you / TZX 50-50), and
-  the Profit column shows your share with TZX's cut on the line beneath.
+- **Orders** — a partner filter (All / 100% you / TZX shared), and the Profit
+  column shows your share with TZX's cut on the line beneath.
+- **New Order** — a *Profit share* control, seeded from the marketplace, with
+  the split shown live in the summary.
 - **Drawer** — the Finance card shows remaining profit → TZX cut → yours.
 - **Payments** — the footer carries TZX's accrued share.
+
+The Ownership panel and the Orders filter stay hidden until at least one
+shared order exists, so nothing changes visually until you create one.
 
 **Not settled anywhere yet.** The TZX figure is reporting only; there is no
 "mark TZX paid" flag, so it accrues forever. Making it settle like booster
