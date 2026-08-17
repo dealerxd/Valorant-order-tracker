@@ -92,6 +92,9 @@
   <!-- GENEL BAKIŞ -->
   <div id="tab-genel" class="hidden"><div id="overviewBody"></div></div>
 
+  <!-- ÖDEMELER -->
+  <div id="tab-odeme" class="hidden"><div id="odemeBody"></div></div>
+
   <!-- SİPARİŞLER -->
   <div id="tab-siparis" class="grid hidden">
     <div class="panel" id="formPanel">
@@ -119,7 +122,29 @@
       </div>
       <div class="two admin-only">
         <div class="field"><label>Link</label><input type="text" id="platformRef" placeholder="sipariş linki"></div>
+        <div class="field"><label>İşi kim yapıyor</label>
+          <select id="fulfil" onchange="onFulfilChange()">
+            <option value="ic">Kendi ekibim</option>
+            <option value="dis">Dış kaynak</option>
+          </select></div>
+      </div>
+      <div class="two admin-only" id="icAlan">
         <div class="field"><label>Booster</label><select id="boosterSel" onchange="onRankChange()"></select></div>
+      </div>
+      <!-- Dış kaynak: iş başka bir satıcıda. note alanına gömülmüyor, kendi
+           kolonları var (shared/migrations/002) — not düzenlemek kaydı silmesin. -->
+      <div class="admin-only hidden" id="disAlan">
+        <div class="two">
+          <div class="field"><label>Satıcı</label><input type="text" id="vendor" placeholder="kime verdin"></div>
+          <div class="field"><label>Ödenecek</label>
+            <div class="two" style="gap:6px">
+              <input type="number" id="vendorCost" min="0" step="0.01" placeholder="0">
+              <select id="vendorCur"><option>USD</option><option>EUR</option><option>TRY</option></select>
+            </div></div>
+        </div>
+        <div class="toggles" style="margin:2px 0 12px">
+          <label class="tg"><input type="checkbox" id="vendorPaid"><span class="sw"></span>Satıcıya ödendi</label>
+        </div>
       </div>
 
       <!-- Rank Boost alanları -->
@@ -301,6 +326,7 @@
 <script src="js/orders.js"></script>
 <script src="js/detail.js"></script>
 <script src="js/overview.js"></script>
+<script src="js/payments.js"></script>
 <script src="js/report.js"></script>
 <script src="js/boosters.js"></script>
 <script src="js/app.js"></script>

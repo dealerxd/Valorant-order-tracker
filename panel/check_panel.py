@@ -246,7 +246,7 @@ with sync_playwright() as p:
     page.evaluate("me={id:'u1',role:'admin',display_name:'Rex'}; buildTabs(); renderMeCard();")
     admin_nav = page.eval_on_selector_all("#tabBar .nav-item", "els => els.map(e => e.dataset.tab)")
     check("admin navigasyonu tam",
-          admin_nav == ["genel","siparis","rapor","arsiv","boosterlar","hesap","fiyat","profil"],
+          admin_nav == ["genel","siparis","rapor","odeme","arsiv","boosterlar","hesap","fiyat","profil"],
           str(admin_nav))
     check("admin avatari", page.eval_on_selector("#meInitial", "e => e.textContent") == "R")
 
@@ -537,6 +537,136 @@ with sync_playwright() as p:
     check("booster panoda booster adi gormuyor",
           page.eval_on_selector_all(".bcard .chip.booster", "e => e.length") == 0)
     page.evaluate("me={id:'admin1',role:'admin',display_name:'Rex'}; setOrdersView('kart'); render();")
+
+    # --- Dış kaynak + Ödemeler --------------------------------------------
+    # Dış kaynak bilgisi `note` alanına gömülüydü (yüklenen paneldeki hata):
+    # notu düzenlemek borcu siliyordu ve bot notu müşteriye "Panel notu:" diye
+    # iletince satıcı maliyeti sızıyordu. Artık kendi kolonlarında.
+    page.evaluate("""
+      me = { id:'admin1', role:'admin', display_name:'Rex' };
+      records = [
+        {id:'A',game:'valorant',orderType:'rank',baslangic:'Gold 1',hedef:'Plat 1',winCount:0,
+         jobDesc:'',startRR:0,region:'TR',riotId:'',extras:[],extraWin:false,durum:'tamam',
+         tarih:'2026-08-16',not:'',image:null,boosterId:'b1',payout:400,paid:false,
+         archived:false,created:'2026-08-15T10:00:00',
+         vendor:'',vendorCost:0,vendorCur:'USD',vendorPaid:false},
+        {id:'B',game:'valorant',orderType:'rank',baslangic:'Gold 1',hedef:'Plat 1',winCount:0,
+         jobDesc:'',startRR:0,region:'TR',riotId:'',extras:[],extraWin:false,durum:'devam',
+         tarih:'2026-08-16',not:'',image:null,boosterId:null,payout:0,paid:false,
+         archived:false,created:'2026-08-15T10:00:00',
+         vendor:'Mert',vendorCost:20,vendorCur:'USD',vendorPaid:false},
+        {id:'C',game:'valorant',orderType:'rank',baslangic:'Gold 1',hedef:'Plat 1',winCount:0,
+         jobDesc:'',startRR:0,region:'TR',riotId:'',extras:[],extraWin:false,durum:'devam',
+         tarih:'2026-08-16',not:'',image:null,boosterId:null,payout:0,paid:false,
+         archived:false,created:'2026-08-15T10:00:00',
+         vendor:'Mert',vendorCost:300,vendorCur:'TRY',vendorPaid:false}
+      ];
+      finance = { A:{platform:'E',cost:25,costCur:'USD',feePct:0,costTL:1000,rate:40},
+                  B:{platform:'E',cost:50,costCur:'USD',feePct:0,costTL:2000,rate:40},
+                  C:{platform:'E',cost:50,costCur:'USD',feePct:0,costTL:2000,rate:40} };
+      tracker = {}; switchTab('siparis'); render();
+    """)
+    page.wait_for_timeout(120)
+
+    check("dis kaynak isi isDis ile taniniyor",
+          page.evaluate("isDis(records[1]) && !isDis(records[0])"))
+    # 20 USD, siparişin kendi kurundan (40) → 800 TL. TRY olan çevrilmez.
+    check("dis maliyet siparisin kurundan TL'ye ceevriliyor",
+          page.evaluate("disMaliyetTL(records[1])") == 800,
+          str(page.evaluate("disMaliyetTL(records[1])")))
+    check("TRY maliyet oldugu gibi kaliyor",
+          page.evaluate("disMaliyetTL(records[2])") == 300)
+    check("dis gider kardan dusuluyor",
+          page.evaluate("paraOzeti().disGider") == 1100,
+          str(page.evaluate("paraOzeti().disGider")))
+    check("kar = net gelir - ucret - dis gider",
+          page.evaluate("(P => P.kar === P.netGelir - P.ucret - P.disGider)(paraOzeti())"))
+
+    # Kuru bilinmeyen döviz maliyeti sessizce 0 sayılmamalı, ekranda söylenmeli.
+    page.evaluate("delete finance.B.rate;")
+    check("kuru olmayan dis maliyet 0 sayiliyor",
+          page.evaluate("disMaliyetTL(records[1])") == 0)
+    check("kuru olmayan is sayiliyor", page.evaluate("paraOzeti().kurYok") == 1)
+    page.evaluate("finance.B.rate = 40;")
+
+    # Ödemeler ekranı
+    page.evaluate("switchTab('odeme')"); page.wait_for_timeout(150)
+    odeme = page.inner_text("#odemeBody")
+    check("odeme ekrani satici grubunu gosteriyor", "Mert" in odeme, odeme[:200])
+    check("odeme ekrani booster borcunu gosteriyor",
+          page.evaluate("paraOzeti().borc") == 400)
+    check("satici borcu iki isi topluyor",
+          page.evaluate("paraOzeti().disBorc") == 1100,
+          str(page.evaluate("paraOzeti().disBorc")))
+    check("satici gruplari tek satici altinda birlesti",
+          page.evaluate("odemeSaticiGruplari().length") == 1)
+    # Satıcıya kendi para biriminde ödeniyor: iki döviz ayrı ayrı görünmeli.
+    check("satici dovizleri ayri tutuluyor",
+          page.evaluate("JSON.stringify(odemeSaticiGruplari()[0].dovizler)")
+          == '{"USD":20,"TRY":300}',
+          page.evaluate("JSON.stringify(odemeSaticiGruplari()[0].dovizler)"))
+    # Dışarıya verilen işin booster ücreti yok — booster listesine düşmemeli.
+    check("dis kaynak isi booster borcuna girmiyor",
+          page.evaluate("odemeBoosterGruplari().every(g => g.isler.every(r => !isDis(r)))"))
+    check("odeme rozeti borclu sayisini veriyor",
+          page.evaluate("navBadge('odeme')") == 2, str(page.evaluate("navBadge('odeme')")))
+    # Ödemeler admin ekranı: booster kendi ekibinin borcunu görmemeli.
+    page.evaluate("me={id:'b1',role:'booster',display_name:'Ali'}; renderPayments();")
+    check("booster odeme ekranini goremiyor",
+          "yalnızca admin" in page.inner_text("#odemeBody"))
+    check("booster odeme rozeti gormuyor", page.evaluate("navBadge('odeme')") == 0)
+    page.evaluate("me={id:'admin1',role:'admin',display_name:'Rex'}; buildTabs(); applyRoleUI();")
+
+    # Form: iç/dış alanları birbirinin alternatifi. applyRoleUI() tüm
+    # .admin-only kutularını birden açtığı için ikisi aynı anda görünüyordu.
+    page.evaluate("switchTab('siparis'); newOrder();")
+    check("varsayilan ic kaynak: satici alanlari gizli",
+          page.eval_on_selector("#disAlan", "e => getComputedStyle(e).display") == "none")
+    check("varsayilan ic kaynak: booster alani acik",
+          page.eval_on_selector("#icAlan", "e => getComputedStyle(e).display") != "none")
+    page.evaluate("document.getElementById('fulfil').value='dis'; onFulfilChange();")
+    check("dis secilince satici alanlari acildi",
+          page.eval_on_selector("#disAlan", "e => getComputedStyle(e).display") != "none")
+    check("dis secilince booster alani gizlendi",
+          page.eval_on_selector("#icAlan", "e => getComputedStyle(e).display") == "none")
+    # İş içeri alınırsa satıcı kaydı temizlenmeli — ödemeler ekranında hayalet
+    # borç satırı kalmasın.
+    page.evaluate("document.getElementById('vendor').value='Mert';"
+                  "document.getElementById('vendorCost').value='20';"
+                  "document.getElementById('fulfil').value='ic'; onFulfilChange();")
+    check("is iceri alininca satici kaydi temizleniyor",
+          page.evaluate("JSON.stringify(disAlanlari())")
+          == '{"vendor":null,"vendor_cost":0,"vendor_currency":"USD","vendor_paid":false}',
+          page.evaluate("JSON.stringify(disAlanlari())"))
+    page.evaluate("resetForm(); render();")
+
+    # --- Panoda sürükle-bırak ---------------------------------------------
+    # bulkPatch Supabase'e gidiyor; saplama başarılı dönüyor, biz çağrının
+    # doğru id ve durumla yapıldığını doğruluyoruz.
+    page.evaluate("""
+      window.__patch = [];
+      window.__realPatch = bulkPatch;
+      bulkPatch = (ids, alan, etiket) => { window.__patch.push([ids, alan]); };
+      setOrdersView('pano'); render();
+    """)
+    check("pano kartlari suruklenebilir",
+          page.eval_on_selector_all(".bcard[draggable='true']", "e => e.length") > 0)
+    page.evaluate("""
+      boardDragStart({dataTransfer:{setData(){},}, currentTarget:{classList:{add(){}}}}, 'B');
+      boardDrop({preventDefault(){}, currentTarget:{classList:{remove(){}}}}, 'tamam');
+    """)
+    check("birakilan kart durum degistiriyor",
+          page.evaluate("JSON.stringify(window.__patch)") == '[[["B"],{"durum":"tamam"}]]',
+          page.evaluate("JSON.stringify(window.__patch)"))
+    # Zaten o sütunda olan kart boşuna yazma yapmamalı.
+    page.evaluate("""
+      window.__patch = [];
+      boardDragStart({dataTransfer:{setData(){},}, currentTarget:{classList:{add(){}}}}, 'A');
+      boardDrop({preventDefault(){}, currentTarget:{classList:{remove(){}}}}, 'tamam');
+    """)
+    check("ayni sutuna birakma bosuna yazmiyor",
+          page.evaluate("window.__patch.length") == 0)
+    page.evaluate("bulkPatch = window.__realPatch; setOrdersView('kart'); render();")
 
     browser.close()
 

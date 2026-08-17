@@ -162,7 +162,8 @@ async function saveRecord(){
     durum:document.getElementById('durum').value,tarih:document.getElementById('tarih').value||new Date().toISOString().slice(0,10),
     note:document.getElementById('not').value.trim(),image:formImage||null,
     booster_id:document.getElementById('boosterSel').value||null,
-    booster_payout:Number(document.getElementById('payout').value)||0
+    booster_payout:Number(document.getElementById('payout').value)||0,
+    ...disAlanlari()
   };
   if(type==='rank'){
     row.baslangic=document.getElementById('baslangic').value;
@@ -212,6 +213,12 @@ function editRecord(id){
   onGameChange();                       // rank listelerini bu oyuna gore doldur
   document.getElementById('orderType').value=r.orderType||'rank';
   document.getElementById('boosterSel').value=r.boosterId||'';
+  document.getElementById('fulfil').value = r.vendor ? 'dis' : 'ic';
+  document.getElementById('vendor').value = r.vendor || '';
+  document.getElementById('vendorCost').value = r.vendorCost || '';
+  document.getElementById('vendorCur').value = r.vendorCur || 'USD';
+  document.getElementById('vendorPaid').checked = !!r.vendorPaid;
+  onFulfilChange();
   if(r.orderType==='netwin'||r.orderType==='placement'){
     document.getElementById('unitRank').value=r.baslangic||ranksOfGame(r.game)[0];
     document.getElementById('unitCount').value=r.winCount||1;
@@ -249,6 +256,30 @@ function editRecord(id){
    arama tusu formu gizliyor ve girilen veri gozden kayboluyordu. */
 let formAcik = false;
 
+/* İş içeride mi dışarıda mı — alanlar buna göre. Booster ataması ile dış
+   satıcı bilgisi aynı anda anlamlı değil. */
+/* Dış kaynak alanları. İş içerideyse temizlenir — yarım kalmış bir satıcı
+   kaydı borç listesinde hayalet satır üretmesin. */
+function disAlanlari(){
+  const el = document.getElementById('fulfil');
+  const dis = el && el.value === 'dis' && isAdmin();
+  if(!dis) return { vendor:null, vendor_cost:0, vendor_currency:'USD', vendor_paid:false };
+  return {
+    vendor: document.getElementById('vendor').value.trim() || null,
+    vendor_cost: Number(document.getElementById('vendorCost').value) || 0,
+    vendor_currency: document.getElementById('vendorCur').value,
+    vendor_paid: document.getElementById('vendorPaid').checked,
+  };
+}
+
+function onFulfilChange(){
+  const dis = document.getElementById('fulfil').value === 'dis';
+  document.getElementById('disAlan').classList.toggle('hidden', !dis);
+  document.getElementById('icAlan').classList.toggle('hidden', dis);
+  if(dis) document.getElementById('boosterSel').value = '';
+  onRankChange();
+}
+
 function showForm(){
   formAcik = true;
   document.getElementById('tab-siparis')?.classList.remove('wide');
@@ -272,6 +303,10 @@ function resetForm(){
   document.getElementById('currency').value='USD';document.getElementById('payout').dataset.manual='';
   document.getElementById('boosterSel').value='';
   const gs=document.getElementById('gameSel'); if(gs){ gs.value=DEFAULT_GAME; onGameChange(); }
+  const fu=document.getElementById('fulfil');
+  if(fu){ fu.value='ic'; document.getElementById('vendor').value='';
+          document.getElementById('vendorCost').value='';
+          document.getElementById('vendorPaid').checked=false; onFulfilChange(); }
   document.getElementById('durum').value=(me&&!isAdmin())?'atandi':'yeni';   // booster'ın girdiği iş zaten ona atanmış
   document.getElementById('startRR').value='0';document.getElementById('region').value='TR';
   document.getElementById('extraWin').checked=false;
@@ -548,6 +583,7 @@ function cardHTML(r){
         <div class="rec-route open" onclick="openDetail('${r.id}')" title="Detayı aç">${routeHTML(r)}</div>
         <div class="rec-meta" style="margin-top:7px">
           <span class="chip game">${esc(gameOf(r.game).short)}</span>
+          ${isAdmin()&&isDis(r)?`<span class="chip dis">🏷 ${esc(r.vendor)}${r.vendorPaid?'':' · ödenmedi'}</span>`:''}
           ${r.orderType!=='rank'?`<span class="chip" style="border-color:rgba(90,157,237,.35);color:var(--blue)">🎯 ${ORDER_TYPES[r.orderType]}</span>`:''}
           ${r.archived?`<span class="chip" style="color:var(--amber)">🗄 arşiv</span>`:''}
           ${isAdmin()&&f.platform?`<span class="chip" style="border-color:rgba(212,175,55,.3);color:var(--gold)">🛒 ${esc(f.platform)}${refHTML(f.platformRef)}</span>`:''}
@@ -606,7 +642,8 @@ function renderTable(list){
         <div class="o-sub">${esc(r.tarih||'')}${r.riotId?' · '+esc(r.riotId):''}</div></td>
       <td class="c-game"><span class="chip game">${esc(gameOf(r.game).short)}</span></td>
       <td class="c-st"><span class="status ${esc(r.durum)}">${esc(STATUS_LABEL[r.durum]||r.durum)}</span></td>
-      ${admin?`<td class="c-b">${r.boosterId?esc(nameOf(r.boosterId)):'<span class="dim">atanmadı</span>'}</td>`:''}
+      ${admin?`<td class="c-b">${isDis(r)?`<span class="chip dis">🏷 ${esc(r.vendor)}</span>`
+        :r.boosterId?esc(nameOf(r.boosterId)):'<span class="dim">atanmadı</span>'}</td>`:''}
       <td class="c-track">${trackChip(r)||'<span class="dim">—</span>'}</td>
       ${para}
       <td class="c-act">${nextBtn(r)}<button class="icon-btn" onclick="openDetail('${r.id}')">🔍</button></td>
@@ -628,13 +665,18 @@ function renderBoard(list){
     .concat(ekstra);
   return `<div class="board">${sutunlar.map(k => {
     const kolon = list.filter(r => r.durum === k);
-    return `<div class="bcol">
+    return `<div class="bcol" data-col="${esc(k)}"
+        ondragover="boardDragOver(event,'${esc(k)}')" ondragleave="boardDragLeave(event)"
+        ondrop="boardDrop(event,'${esc(k)}')">
       <div class="bcol-h"><span class="status ${esc(k)}">${esc(STATUS_LABEL[k]||k)}</span><span class="bcol-n">${kolon.length}</span></div>
       <div class="bcol-body">${kolon.map(r => `
-        <div class="bcard" data-selrow="${esc(r.id)}" onclick="openDetail('${esc(r.id)}')">
+        <div class="bcard" data-selrow="${esc(r.id)}" draggable="true"
+             ondragstart="boardDragStart(event,'${esc(r.id)}')" ondragend="boardDragEnd(event)"
+             onclick="openDetail('${esc(r.id)}')">
           <div class="o-route">${routeHTML(r)}</div>
           <div class="bcard-meta">
             <span class="chip game">${esc(gameOf(r.game).short)}</span>
+          ${isAdmin()&&isDis(r)?`<span class="chip dis">🏷 ${esc(r.vendor)}${r.vendorPaid?'':' · ödenmedi'}</span>`:''}
             ${isAdmin()&&r.boosterId?`<span class="chip booster">${esc(nameOf(r.boosterId))}</span>`:''}
             ${trackChip(r)}
           </div>
@@ -642,6 +684,55 @@ function renderBoard(list){
         </div>`).join('') || '<div class="bcol-empty">boş</div>'}</div>
     </div>`;
   }).join('')}</div>`;
+}
+
+/* --- Pano: sürükle-bırak -------------------------------------------------
+
+   Kart üstündeki "→" butonu KALIYOR. Sürükle-bırak fare için hızlı ama
+   dokunmatikte HTML5 DnD çalışmıyor ve yanlış sütuna bırakmanın geri alması
+   yok (NEXT_STATUS'ün tersi domain.json'da tanımlı değil). İkisi bir arada:
+   masaüstünde sürükle, telefonda butona bas.
+
+   Sürüklenen kart seçiliyse tüm seçim taşınır — kullanıcı 5 kart seçip birini
+   sürüklediğinde beşinin de taşınmasını bekler. */
+let boardDrag = null;
+
+function boardDragStart(e, id){
+  boardDrag = ordersView.sel.has(id) ? [...ordersView.sel] : [id];
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', id);   // Firefox sürüklemeyi başlatmıyor yoksa
+  e.currentTarget.classList.add('dragging');
+}
+function boardDragEnd(e){
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.bcol.over').forEach(el => el.classList.remove('over'));
+  boardDrag = null;
+}
+function boardDragOver(e, durum){
+  if(!boardDrag) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('over');
+}
+function boardDragLeave(e){
+  // Alt elemanlara girip çıkarken tetiklenmesin.
+  if(!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('over');
+}
+async function boardDrop(e, durum){
+  e.preventDefault();
+  e.currentTarget.classList.remove('over');
+  const ids = boardDrag; boardDrag = null;
+  if(!ids || !ids.length) return;
+
+  // Zaten o sütunda olanları atla; boşuna yazma ve boşuna realtime turu olmasın.
+  const tasinacak = records.filter(r => ids.includes(r.id) && r.durum !== durum);
+  if(!tasinacak.length) return;
+
+  // Geri alması olmadığı için birden fazla kartta onay istiyoruz.
+  if(tasinacak.length > 1 &&
+     !confirm(`${tasinacak.length} iş "${STATUS_LABEL[durum]}" durumuna taşınacak. Devam?`)) return;
+
+  await bulkPatch(tasinacak.map(r => r.id), { durum }, 'Durum değiştirme');
 }
 
 function render(){
@@ -671,6 +762,7 @@ function render(){
 
   // Genel Bakış açıksa o da tazelensin. Erken return'lerin ARKASINDA değil.
   if(currentTab === 'genel') renderOverview();
+  if(currentTab === 'odeme') renderPayments();
   renderDetail();   // drawer açıksa içindeki durum/para da tazelensin
   renderShell();
 }

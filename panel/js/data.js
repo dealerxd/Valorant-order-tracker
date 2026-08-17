@@ -7,6 +7,9 @@ function rowToRec(r){
     extraWin:!!r.extra_win,
     durum:r.durum||'yeni',tarih:r.tarih||'',not:r.note||'',image:r.image||null,
     boosterId:r.booster_id||null,payout:Number(r.booster_payout)||0,paid:!!r.paid,
+    // Dış kaynak: iş bizde değil dışarıdaki bir satıcıda.
+    vendor:r.vendor||'',vendorCost:Number(r.vendor_cost)||0,
+    vendorCur:r.vendor_currency||'USD',vendorPaid:!!r.vendor_paid,
     archived:!!r.archived,created:r.created_at||''};
 }
 /* Kusak sayaci: iki loadAll ust uste calisirsa gec donen BAYAT olan ekrani

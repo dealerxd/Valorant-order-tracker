@@ -46,6 +46,8 @@ const hoursSince = iso => { const t = tsMs(iso); return t == null ? Infinity : (
    "Açık iş" tanımı da tek yerde: arşivlenmemiş ve akışı bitmemiş.
    NEXT_STATUS'ü olan bir durum akışın sonunda değil demektir. */
 const isOpen     = r => !r.archived && !!NEXT_STATUS[r.durum];
+/* İş dışarıda mı? vendor doluysa evet. */
+const isDis      = r => !!(r.vendor && r.vendor.trim());
 const isActive   = r => !r.archived && (r.durum === 'atandi' || r.durum === 'devam');
 const activeRecs = () => records.filter(r => !r.archived);
 
@@ -126,20 +128,40 @@ function alertModel(){
    BOOSTER UCRETI tum aktif islerden. Finans kaydi girilmemis bir isin ucreti
    odenecek ama geliri henuz bilinmiyor - onu kardan dusmemek kari sisirirdi.
    Bu yuzden ekranlarda "N isin finansi girilmemis" uyarisi da veriliyor. */
+/* Dış satıcı maliyeti TL'ye çevriliyor. Kur, siparişin kendi finans kaydındaki
+   kurdan alınıyor (sipariş anında sabitlenmiş olan); yoksa TL varsayılıyor —
+   uydurma bir kur kullanmaktansa eksik göstermek yeğ. */
+function disMaliyetTL(r){
+  if(!isDis(r) || !r.vendorCost) return 0;
+  if(r.vendorCur === 'TRY') return Math.round(r.vendorCost);
+  const kur = Number((finance[r.id] || {}).rate) || 0;
+  return kur ? Math.round(r.vendorCost * kur) : 0;
+}
+/* Kuru bilinmediği için hesaba katılamayan dış maliyetler — ekranda söylenmeli. */
+const disKuruYok = r => isDis(r) && r.vendorCost > 0 && r.vendorCur !== 'TRY'
+                        && !Number((finance[r.id] || {}).rate);
+
 function paraOzeti(){
   const aktif = activeRecs();
   const finansli = aktif.filter(r => hasFin(r.id));
   const brut = finansli.reduce((a,r) => a + brutTLof(r.id), 0);
   const netGelir = finansli.reduce((a,r) => a + netGelirTLof(r.id), 0);
   const ucret = aktif.reduce((a,r) => a + r.payout, 0);
+  // Dışarıya verilen işin maliyeti de gider: düşülmezse o işlerde kâr
+  // olduğundan yüksek görünür.
+  const disGider = aktif.reduce((a,r) => a + disMaliyetTL(r), 0);
   return {
-    brut, netGelir, ucret,
-    kar: netGelir - ucret,
+    brut, netGelir, ucret, disGider,
+    kurYok: aktif.filter(disKuruYok).length,
+    kar: netGelir - ucret - disGider,
     finanssiz: aktif.filter(r => r.durum !== 'yeni' && !hasFin(r.id)).length,
     // Borc = isi biten ama odenmemis ucretler. Devam eden isin ucreti henuz
     // borc degil; is yarim kalirsa odenmeyebilir.
     borc: aktif.filter(r => !isOpen(r) && !r.paid && r.payout > 0)
                .reduce((a,r) => a + r.payout, 0),
+    // Dış satıcıya olan borç ayrı tutulur: farklı kişiye, farklı para biriminde.
+    disBorc: aktif.filter(r => isDis(r) && !r.vendorPaid)
+                  .reduce((a,r) => a + disMaliyetTL(r), 0),
   };
 }
 
@@ -148,6 +170,13 @@ function navBadge(tab){
   switch(tab){
     case 'genel':      return alertModel().length;
     case 'siparis':    return activeRecs().filter(isOpen).length;
+    case 'odeme':      return isAdmin()
+      ? new Set(activeRecs().filter(r => !isOpen(r) && !r.paid && r.payout > 0 && r.boosterId && !isDis(r))
+                            .map(r => r.boosterId)
+                 ).size
+        + new Set(activeRecs().filter(r => isDis(r) && !r.vendorPaid && r.vendorCost > 0)
+                              .map(r => r.vendor.trim())).size
+      : 0;
     case 'arsiv':      return records.filter(r => r.archived).length;
     case 'boosterlar': return people.filter(p => p.active && p.role === 'booster').length;
     default:           return 0;

@@ -8,16 +8,17 @@ let currentTab = 'genel';
 function navDef(){
   return isAdmin()
     ? [['genel','Genel Bakış','◱'], ['siparis','Siparişler','▤'], ['rapor','Rapor','◆'],
-       ['arsiv','Arşiv','▨'], ['boosterlar','Boosterlar','◇'], ['hesap','Hesaplayıcı','∑'],
+       ['odeme','Ödemeler','₺'], ['arsiv','Arşiv','▨'], ['boosterlar','Boosterlar','◇'], ['hesap','Hesaplayıcı','∑'],
        ['fiyat','Fiyat Listesi','≡'], ['profil','Profilim','◉']]
     : [['siparis','İşlerim','▤'], ['fiyat','Fiyat Listesi','≡'], ['profil','Profilim','◉']];
 }
 
-const TAB_IDS = ['genel','siparis','rapor','arsiv','boosterlar','hesap','fiyat','profil'];
+const TAB_IDS = ['genel','siparis','odeme','rapor','arsiv','boosterlar','hesap','fiyat','profil'];
 
 const PAGE_META = {
   genel:      ['Genel Bakış',   'işin özeti ve dikkat isteyenler'],
   siparis:    ['Siparişler',    'açık işler ve takip durumu'],
+  odeme:      ['Ödemeler',      'boosterlara ve dış satıcılara olan borç'],
   rapor:      ['Rapor',         'dönemsel gelir ve kâr'],
   arsiv:      ['Arşiv',         'kapatılmış işler'],
   boosterlar: ['Boosterlar',    'ekip ve davet kodları'],
@@ -64,6 +65,7 @@ function switchTab(t){
 
   if(t === 'siparis')    render();
   if(t === 'genel')      renderOverview();
+  if(t === 'odeme')      renderPayments();
   if(t === 'rapor')      renderReport();
   if(t === 'arsiv')      renderArchive();
   if(t === 'fiyat')      renderPriceTables();
@@ -184,6 +186,9 @@ function applyRoleUI(){
   const admin = isAdmin();
   document.querySelectorAll('#formPanel .admin-only')
     .forEach(el => el.classList.toggle('hidden', !admin));
+  // #disAlan/#icAlan hem admin-only hem de birbirinin alternatifi: yukarıdaki
+  // toplu toggle ikisini birden açardı. Görünürlüğü seçime göre yeniden kur.
+  if(admin) onFulfilChange();
   if(!admin){
     // Booster işini kendisi girer, ücretini fiyat listesinden alır; finansı
     // admin sonradan doldurur.
