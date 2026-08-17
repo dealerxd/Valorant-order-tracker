@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """shared/domain.json -> panel/js/domain.generated.js
+                      -> panel-v2/lib/domain.generated.ts
 
-Panel statik bir site: derleme adimi yok, Cloudflare Pages dosyalari oldugu
-gibi yayinliyor. O yuzden sozlesmeyi tarayicida fetch ile okumak yerine duz
-bir JS dosyasina yaziyoruz — uretilen dosya repoya commit'leniyor, panelin
-acilisi ek bir istege bagli kalmiyor.
+Iki panel var: `panel/` statik site (derleme adimi yok, Cloudflare Pages
+dosyalari oldugu gibi yayinliyor), `panel-v2/` Next.js uygulamasi. Ikisi de
+ayni sozlesmeyi okumak zorunda, yoksa `resells` satirlarina birbiriyle
+uyusmayan bolge/rank/durum degerleri yazilir.
+
+Sozlesmeyi tarayicida fetch ile okumak yerine duz dosyaya yaziyoruz —
+uretilen dosyalar repoya commit'leniyor, panelin acilisi ek bir istege
+bagli kalmiyor.
 
     python shared/generate.py            # uret
     python shared/generate.py --check    # senkron mu? degilse cikis kodu 1
@@ -22,6 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "shared" / "domain.json"
 TARGET = ROOT / "panel" / "js" / "domain.generated.js"
+TARGET_TS = ROOT / "panel-v2" / "lib" / "domain.generated.ts"
 
 HEADER = """/* ============================================================
    URETILMIS DOSYA - ELLE DUZENLEME
@@ -148,6 +154,80 @@ def render(domain: dict) -> str:
     return "\n".join(lines)
 
 
+def render_ts(domain: dict) -> str:
+    """Ayni sozlesme, panel-v2 (Next.js) icin TypeScript olarak.
+
+    Yalnizca veriyi disari veriyor; panel/js surumundeki DOM yardimcilari
+    (fillRegionSelects vb.) burada anlamsiz — Next.js tarafi React ile
+    render ediyor. Elo aritmetigi de panel-v2/lib/domain.ts icinde, cunku
+    orasi sabitleri buradan okuyor.
+    """
+    ranks = domain["ranks"]
+    regions = domain["regions"]
+    statuses = domain["statuses"]
+    games = domain["games"]
+
+    panel_ranks = [r["panel"] for r in ranks if r["panel"]]
+    game_ranks = {
+        g["id"]: (panel_ranks if g["ranks"] is None else g["ranks"]) for g in games
+    }
+    game_meta = [
+        {"id": g["id"], "label": g["label"], "short": g["short"], "tracked": g["tracked"]}
+        for g in games
+    ]
+    tier_name = {r["tier"]: (r["panel"] or r["api"]) for r in ranks}
+
+    return "\n".join([
+        HEADER,
+        "/* Bu dosya shared/domain.json'dan uretiliyor. Panele ozgu sunum",
+        "   detaylari (oyun renkleri, hesap alani etiketleri, basamak fiyatlari,",
+        "   ekstralar) sozlesmede degil — onlar lib/domain.ts icinde. */",
+        "",
+        f"export const TABLES = {_js(domain['tables'])} as const;",
+        "",
+        "/** Oyun id'leri: resells.game bu degerleri tutuyor. */",
+        f"export type GameId = {' | '.join(_js(g['id']) for g in games)};",
+        "",
+        "export interface GameMeta {",
+        "  id: GameId;",
+        "  label: string;",
+        "  short: string;",
+        "  /** Takip botu bu oyunu maç maç yokluyor mu. Yalnizca Valorant. */",
+        "  tracked: boolean;",
+        "}",
+        "",
+        f"export const GAMES: readonly GameMeta[] = {_js(game_meta)};",
+        f"export const GAME_RANKS: Record<GameId, string[]> = {_js(game_ranks)};",
+        f"export const DEFAULT_GAME: GameId = {_js(games[0]['id'])};",
+        "",
+        "/** Panelde secilebilen Valorant rank'lari, dusukten yuksege.",
+        "    Iron ve Radiant bilincli olarak disarida — bkz. shared/domain.json */",
+        f"export const RANK_ORDER: string[] = {_js(panel_ranks)};",
+        f"export const RANK_TIER: Record<string, number> = {_js({r['panel']: r['tier'] for r in ranks if r['panel']})};",
+        f"export const TIER_NAME: Record<number, string> = {_js(tier_name)};",
+        "",
+        "/** Bolgeler. `panel` degeri resells.region'a yazilan degerdir —",
+        "    tracker ayni etiketten API kodunu cozuyor, uydurma bir deger",
+        "    yazilirsa sessizce eslesmez. */",
+        f"export const REGION_VALUES: string[] = {_js([r['panel'] for r in regions if r['form']])};",
+        f"export const REGION_MULT: Record<string, number> = {_js({r['panel']: r['mult'] for r in regions})};",
+        f"export const REGION_API: Record<string, string> = {_js({r['panel']: r['api'] for r in regions})};",
+        "",
+        "/** Siparis durumlari. Etiketler sozlesmenin Turkce'si; panel-v2",
+        "    tasarimi Ingilizce gosteriyor (lib/domain.ts ST). Gecisler ve",
+        "    anahtarlar buradan gelmeli. */",
+        f"export type StatusKey = {' | '.join(_js(s['key']) for s in statuses)};",
+        f"export const STATUS_LABEL_TR: Record<string, string> = {_js({s['key']: s['label'] for s in statuses})};",
+        f"export const NEXT_STATUS: Record<string, string> = {_js({s['key']: s['next'] for s in statuses if s['next']})};",
+        f"export const FORM_STATUSES: string[] = {_js([s['key'] for s in statuses if s['form']])};",
+        f"export const LISTABLE_STATUSES: string[] = {_js([s['key'] for s in statuses if s['listable']])};",
+        "",
+        "/** Elo sabitleri. tracker/ranks.py ayni degerleri okuyor. */",
+        f"export const ELO = {_js(domain['elo'])} as const;",
+        "",
+    ])
+
+
 def main(argv: list[str]) -> int:
     check = "--check" in argv
 
@@ -160,23 +240,29 @@ def main(argv: list[str]) -> int:
         print(f"HATA: {SOURCE} gecerli JSON degil: {exc}", file=sys.stderr)
         return 2
 
-    output = render(domain)
+    outputs = [(TARGET, render(domain)), (TARGET_TS, render_ts(domain))]
 
     if check:
-        current = TARGET.read_text(encoding="utf-8") if TARGET.exists() else None
-        if current == output:
+        stale = [
+            path for path, output in outputs
+            if (path.read_text(encoding="utf-8") if path.exists() else None) != output
+        ]
+        if not stale:
             return 0
+        listed = "\n".join(f"    {p.relative_to(ROOT)}" for p in stale)
         print(
-            f"HATA: {TARGET.relative_to(ROOT)} guncel degil.\n"
+            "HATA: uretilmis dosya(lar) guncel degil:\n"
+            f"{listed}\n"
             "  shared/domain.json degismis ama uretilmis dosya yenilenmemis.\n"
             "  Duzeltmek icin: python shared/generate.py",
             file=sys.stderr,
         )
         return 1
 
-    TARGET.parent.mkdir(parents=True, exist_ok=True)
-    TARGET.write_text(output, encoding="utf-8")
-    print(f"yazildi: {TARGET.relative_to(ROOT)}")
+    for path, output in outputs:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(output, encoding="utf-8")
+        print(f"yazildi: {path.relative_to(ROOT)}")
     return 0
 
 

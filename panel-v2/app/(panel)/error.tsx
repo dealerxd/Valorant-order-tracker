@@ -24,8 +24,8 @@ export default function PanelError({
           {error.message || 'The database request failed.'}
         </p>
         <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
-          If this is a fresh deploy, check that <code>supabase/migrations/0001_panel_v2.sql</code> has been
-          applied and the Supabase env vars are set.
+          If this is a fresh deploy, check that the migrations in <code>shared/migrations/</code> have
+          been applied and the Supabase env vars are set.
         </p>
         <button onClick={reset} className="hover-gold" style={{ ...ghostButton, marginTop: 12 }}>
           Try again

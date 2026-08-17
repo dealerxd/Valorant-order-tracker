@@ -18,8 +18,8 @@ import 'server-only';
 import { cache } from 'react';
 import { createClient } from './supabase/server';
 import {
-  CUR, G, GAME_IN, GAME_KEYS, rankFromElo,
-  type Currency, type DbGame, type GameKey, type OrderType, type Status,
+  CUR, G, GAME_KEYS, GAMES, rankFromElo,
+  type Currency, type GameKey, type OrderType, type Status,
 } from './domain';
 import { DAY, ago, shortDate } from './format';
 import { unnest, type PricingTables } from './pricing';
@@ -45,7 +45,7 @@ interface ResellRow {
   id: string;
   created_at: string | null;
   updated_at: string | null;
-  game: DbGame | null;
+  game: GameKey | null;
   order_type: OrderType | null;
   baslangic: string | null;
   hedef: string | null;
@@ -134,7 +134,9 @@ function mapOrder(
   const hasVendorCol = !!(r.vendor && r.vendor.trim());
   const external = hasVendorCol || !!legacy;
 
-  const game = GAME_IN[(r.game as DbGame) ?? 'valorant'] || 'valorant';
+  // resells.game already stores the contract's ids, so there is nothing to
+  // translate — only guard against a value the contract does not know.
+  const game: GameKey = r.game && GAMES[r.game] ? r.game : 'valorant';
   const tracked = G(game).tracker;
 
   const rate = Number(fin.rate) || 0;

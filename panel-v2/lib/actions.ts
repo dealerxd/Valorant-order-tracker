@@ -12,7 +12,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from './supabase/server';
 import { getProfile } from './orders';
-import { CUR_CODE, GAME_OUT, NEXT, ST, type Currency, type GameKey, type Status } from './domain';
+import { CUR_CODE, NEXT, ST, type Currency, type GameKey, type Status } from './domain';
 
 export interface ActionResult {
   ok: boolean;
@@ -298,7 +298,7 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult & 
     const boosterId = isBooster ? me.id : external ? null : (input.boosterId || null);
 
     const row: Record<string, unknown> = {
-      game: GAME_OUT[input.game] || 'valorant',
+      game: input.game,
       order_type: input.type,
       baslangic: input.from,
       hedef: input.type === 'rank' ? input.to : '',
@@ -376,7 +376,7 @@ export async function saveStepPrices(game: GameKey, map: Record<string, number>)
     const nested = values.length > 0 && values.every((x) => x && typeof x === 'object' && !Array.isArray(x));
     const base = nested ? existing : { valorant: existing };
 
-    const merged = { ...base, [GAME_OUT[game]]: map };
+    const merged = { ...base, [game]: map };
 
     const { error } = await sb.from('pricing').upsert({
       id: 'step_prices', data: merged, updated_at: new Date().toISOString(),

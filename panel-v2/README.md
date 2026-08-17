@@ -1,12 +1,18 @@
 # Resell.BOT — Panel v2
 
+> Third surface in this repo, alongside `panel/` (the current static site) and
+> `tracker/` (the Python bot). It does **not** replace `panel/` yet — both are
+> live and read the same Supabase tables. Vercel's root directory is
+> `panel-v2`.
+
 Next.js (App Router) implementation of the Panel v2 design handoff. Talks to
-the same Supabase project as the Python tracker bot in the repo root.
+the same Supabase project as the `panel/` static site and the `tracker/`
+Python bot.
 
 ## Running it
 
 ```bash
-cd panel && npm install && npm run dev
+cd panel-v2 && npm install && npm run dev
 ```
 
 Copy `.env.example` to `.env.local` and fill in the blanks. The Supabase URL
@@ -22,7 +28,7 @@ and publishable key are already filled in — the rest are secrets you supply:
 
 ## The migration — already applied
 
-`supabase/migrations/0001_panel_v2.sql` has been applied to the live project
+`shared/migrations/005_panel_v2_eklentileri.sql` has been applied to the live project
 (`yhrvpgkxywwgeelhjszb`) as migration `panel_v2_additions`. It is idempotent,
 so re-running it is safe.
 
@@ -78,6 +84,8 @@ app/
   login/
   api/fx/ api/ingest/{eldorado,gameboost}/
 lib/
+  domain.generated.ts GENERATED from shared/domain.json — do not edit
+  domain.ts           games/regions/statuses; re-exports the generated contract
   model.ts            view-model types + every derived value (client-safe)
   orders.ts           queries and row -> view mapping  <- from sb-store.js
   actions.ts          all mutations, as server actions
@@ -88,7 +96,7 @@ lib/
   format.ts           TL(), ago(), shortDate()
   supabase/           server / browser / service-role clients
 components/           one file per surface from the handoff
-supabase/migrations/  0001_panel_v2.sql
+(migrations live in shared/migrations/, alongside the other two surfaces)
 ```
 
 Conventions worth knowing before editing:
@@ -110,7 +118,7 @@ Conventions worth knowing before editing:
 
 ## Tracker
 
-Riot/HenrikDev polling stays in the Python bot at the repo root (Railway) —
+Riot/HenrikDev polling stays in the `tracker/` Python bot (Railway) —
 option (b) from the handoff. The panel only reads `tracker_state` and
 `tracker_matches`, so there is no `/api/tracker` route and no `RIOT_API_KEY`
 here.
@@ -194,6 +202,38 @@ shared order exists, so nothing changes visually until you create one.
 "mark TZX paid" flag, so it accrues forever. Making it settle like booster
 payouts do needs one boolean on `resells` (mirroring `vendor_paid`) plus a
 row in the Payments table — say the word and it is a small change.
+
+## The shared contract
+
+Game ids, rank ladders, region values and multipliers, status keys and
+transitions, and the elo constants all come from `shared/domain.json` via
+`shared/generate.py`, which now emits **two** files:
+
+```
+shared/domain.json ──> panel/js/domain.generated.js   (static site)
+                   └─> panel-v2/lib/domain.generated.ts (this app)
+```
+
+Regenerate with `python shared/generate.py`; `--check` fails if either output
+is stale, and `tracker/test_smoke.py::test_shared_contract` runs that check.
+
+This matters more than tidiness. All three surfaces write the same `resells`
+rows, and a value that drifts does not fail loudly — the tracker simply stops
+matching. Hand-copying the lists (which the first cut of this app did) had
+already introduced two real defects:
+
+- **`region`** was written as `"Other"`, but the contract's catch-all is
+  `"Diğer"`. The tracker resolves a region's API code from that exact string,
+  so every non-TR/EU/NA order would have silently failed to resolve.
+- **Wild Rift** was folded onto Valorant, so a Wild Rift order's ranks would
+  have been labelled with the Valorant ladder.
+
+Both are fixed by reading the contract. What stays hand-written in
+`lib/domain.ts` is only what the contract deliberately omits, because it is
+presentation rather than shared meaning: game accent colours, account-field
+labels, division step prices, and the extras multipliers. Status *labels* are
+also local — the contract's are Turkish, the design is English — but the keys
+and transitions come from the contract.
 
 ## Reading the live schema, not the handoff
 

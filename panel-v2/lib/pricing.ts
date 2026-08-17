@@ -5,7 +5,7 @@
    first division the account has already climbed (startRR), then apply the
    extras multiplier and the region uplift. */
 
-import { EXTRAS, G, GAME_OUT, type GameKey } from './domain';
+import { EXTRAS, G, regionMultiplier, type GameKey } from './domain';
 
 export interface PricingTables {
   /** step_prices: { [dbGame]: { [rank]: price } } */
@@ -63,14 +63,14 @@ export function suggestPayout(f: PayoutInput): number {
   for (let i = a; i < b; i++) sum += S[L[i].split(' ')[0]] || 300;
   sum -= Math.round((S[L[a].split(' ')[0]] || 300) * (Number(f.startRR) || 0) / 100);
 
-  const regionMult = f.region === 'NA' ? 1.05 : f.region === 'Other' ? 1.1 : 1;
+  const regionMult = regionMultiplier(f.region);
   return Math.round(sum * extrasMultiplier(f.extras) * regionMult);
 }
 
 /** Booster fee taken from the saved price list when the game has one, falling
     back to the built-in ladder defaults. */
 export function payoutFromTables(f: PayoutInput, tables: PricingTables): number {
-  const map = tables.step[GAME_OUT[f.game]];
+  const map = tables.step[f.game];
   if (!map || !Object.keys(map).length) return suggestPayout(f);
 
   const L = G(f.game).ladder;
@@ -78,7 +78,7 @@ export function payoutFromTables(f: PayoutInput, tables: PricingTables): number 
   const b = L.indexOf(f.to);
 
   if (f.type === 'netwin' || f.type === 'placement') {
-    const perWin = tables.netWin[GAME_OUT[f.game]]?.[f.from];
+    const perWin = tables.netWin[f.game]?.[f.from];
     if (perWin == null) return suggestPayout(f);
     const unit = Number(perWin) * (f.type === 'placement' ? 0.5 : 1);
     return Math.round(unit * Math.max(1, Number(f.count) || 1) * extrasMultiplier(f.extras));
@@ -93,7 +93,7 @@ export function payoutFromTables(f: PayoutInput, tables: PricingTables): number 
   const first = map[L[a]] != null ? Number(map[L[a]]) : (G(f.game).step[L[a].split(' ')[0]] || 300);
   sum -= Math.round(first * (Number(f.startRR) || 0) / 100);
 
-  const regionMult = f.region === 'NA' ? 1.05 : f.region === 'Other' ? 1.1 : 1;
+  const regionMult = regionMultiplier(f.region);
   return Math.round(sum * extrasMultiplier(f.extras) * regionMult);
 }
 
@@ -133,7 +133,7 @@ export function quote(
 /** Rows for the Division Prices editor: every ladder step that has a price. */
 export function stepRows(game: GameKey, tables: PricingTables) {
   const L = G(game).ladder;
-  const map = tables.step[GAME_OUT[game]] || {};
+  const map = tables.step[game] || {};
   return L.slice(0, -1).map((rank, i) => ({
     rank,
     label: `${rank} → ${L[i + 1]}`,

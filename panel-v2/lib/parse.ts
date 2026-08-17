@@ -4,7 +4,7 @@
    real Eldorado / GameBoost wording. It stays useful as a fallback after the
    API ingest lands, so treat these patterns as data, not as scratch code. */
 
-import { EXTRAS, G, type GameKey } from './domain';
+import { EXTRAS, G, normalizeRegion, type GameKey } from './domain';
 
 export interface ParsedOrder {
   game?: GameKey;
@@ -51,7 +51,7 @@ export function parsePaste(text: string): ParsedOrder | null {
   out.game = /marvel|rivals/i.test(t)
     ? 'rivals'
     : /rocket\s?league|\brl\b/i.test(t)
-      ? 'rocket'
+      ? 'rl'
       : /overwatch|\bow2?\b/i.test(t)
         ? 'ow2'
         : 'valorant';
@@ -93,8 +93,8 @@ export function parsePaste(text: string): ParsedOrder | null {
     if (nick) out.riotId = nick[1];
   }
 
-  const reg = t.match(/\b(TR|EU|EUW|NA|AP|KR|BR|LATAM)\b/);
-  if (reg) out.region = ['TR', 'EU', 'NA'].includes(reg[1]) ? reg[1] : reg[1] === 'EUW' ? 'EU' : 'Other';
+  const reg = t.match(/\b(TR|EU|EUW|EUNE|NA|AP|KR|BR|LATAM)\b/);
+  if (reg) out.region = normalizeRegion(reg[1]);
 
   const rr = t.match(/(\d{1,2})\s?rr\b/i);
   if (rr) out.startRR = Number(rr[1]);

@@ -1,6 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { CUR_CODE, GAME_OUT, type Currency, type GameKey } from '@/lib/domain';
+import { CUR_CODE, type Currency, type GameKey } from '@/lib/domain';
 import { parsePaste } from '@/lib/parse';
 
 /* Shared plumbing for the marketplace pull routes.
@@ -88,7 +88,7 @@ export async function upsertOrders(orders: IngestedOrder[], rate: number): Promi
     const { data, error } = await sb
       .from('resells')
       .insert({
-        game: GAME_OUT[o.game] || 'valorant',
+        game: o.game,
         order_type: o.type,
         baslangic: o.from,
         hedef: o.type === 'rank' ? o.to : '',
