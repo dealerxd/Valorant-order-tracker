@@ -12,12 +12,15 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+import httpx
+
 import henrik
 import messages
 import ranks
 import store as store_mod
 from config import Config
 from notify import Dispatcher
+from store import StoreError
 from tracker import Tracker
 
 PASSED: list[str] = []
@@ -48,6 +51,7 @@ class FakeStore:
             "id": order_id, "handle": store_mod.handle_of(order_id),
             "riot_id": "Boost#TR1", "name": "Boost", "tag": "TR1",
             "panel_region": "TR", "durum": "devam", "order_type": "rank",
+            "game": store_mod.DEFAULT_GAME,
             "baslangic": "Gold 1", "hedef": "Gold 3", "note": None,
             "booster_id": None, "archived": False, "created_at": iso(600),
             "tracked": True, "puuid": f"puuid-{order_id}", "region": "eu",
@@ -62,9 +66,13 @@ class FakeStore:
         self.matches.setdefault(order_id, [])
         return base
 
+    def _tracked_game(self, o: dict) -> bool:
+        """Gercek sorgudaki `game=in.(...)` filtresinin karsiligi."""
+        return o["game"] in store_mod.TRACKED_GAMES
+
     async def list_pending_links(self) -> list[dict]:
         return [dict(o) for o in self.orders.values()
-                if not o["tracked"] and o["riot_id"]
+                if not o["tracked"] and o["riot_id"] and self._tracked_game(o)
                 and o["durum"] in store_mod.ACTIVE_STATUSES and not o["archived"]]
 
     async def set_riot_id(self, order_id: str, riot_id) -> None:
@@ -72,11 +80,12 @@ class FakeStore:
 
     async def list_trackable(self) -> list[dict]:
         return [dict(o) for o in self.orders.values()
-                if o["tracked"] and not o["paused"] and o["durum"] in store_mod.ACTIVE_STATUSES]
+                if o["tracked"] and not o["paused"] and self._tracked_game(o)
+                and o["durum"] in store_mod.ACTIVE_STATUSES]
 
     async def list_orders(self, *, only_tracked: bool = False) -> list[dict]:
         rows = [dict(o) for o in self.orders.values()
-                if o["durum"] in store_mod.LISTABLE_STATUSES]
+                if o["durum"] in store_mod.LISTABLE_STATUSES and self._tracked_game(o)]
         return [o for o in rows if o["tracked"]] if only_tracked else rows
 
     async def get_order(self, handle: str) -> dict | None:
@@ -536,7 +545,256 @@ async def test_messages() -> None:
     check("ozet mac sayisi iceriyor", "Oynanan mac: 1" in summary)
 
 
+def test_shared_contract() -> None:
+    """Panel ile tracker ayni sozlesmeyi mi goruyor?
+
+    shared/domain.json iki tarafi da besliyor: tracker dogrudan okuyor, panel
+    ondan uretilen panel/js/domain.generated.js'i okuyor. Kaynagi degistirip
+    generate'i unutmak iki tarafi sessizce ayirir - asagidaki --check bunu
+    yakalar.
+    """
+    print("\n[ortak sozlesme]")
+
+    import json
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import domain
+
+    root = Path(__file__).resolve().parent.parent
+
+    result = subprocess.run(
+        [sys.executable, str(root / "shared" / "generate.py"), "--check"],
+        capture_output=True, text=True,
+    )
+    check("uretilmis panel dosyasi guncel", result.returncode == 0,
+          result.stderr.strip())
+
+    # Panelin yazabilecegi her rank etiketi tracker tarafinda cozulmeli, yoksa
+    # /bagla "Panelde yazan hedef rank cozulemedi" deyip siparisi reddeder.
+    unresolved = [r for r in domain.PANEL_RANK_ORDER if ranks.parse_rank(r) is None]
+    check("panelin tum rank etiketleri cozuluyor", not unresolved, str(unresolved))
+
+    # Panel etiketi dogru tier'e gitmeli - 'Plat 1' Platinum 1'e denk gelmeli,
+    # tesadufen baska bir seye degil.
+    check("'Plat 1' -> Platinum 1", ranks.tier_name(ranks.parse_rank("Plat 1")) == "Platinum 1")
+    check("panel rank sirasi artan", [domain.PANEL_RANK_TO_TIER[r] for r in domain.PANEL_RANK_ORDER]
+          == sorted(domain.PANEL_RANK_TO_TIER[r] for r in domain.PANEL_RANK_ORDER))
+
+    # Panelin yazabilecegi her bolge bir API koduna gitmeli.
+    raw = json.loads((root / "shared" / "domain.json").read_text(encoding="utf-8"))
+    form_regions = [r["panel"] for r in raw["regions"] if r["form"]]
+    check("panel bolgeleri API koduna cozuluyor",
+          all(store_mod.panel_region_to_api(r) == next(
+              x["api"] for x in raw["regions"] if x["panel"] == r) for r in form_regions))
+
+    # Panelin '->' butonuyla ulasabilecegi durumlar tracker tarafinda taninmali.
+    reachable = {s["next"] for s in raw["statuses"] if s["next"]}
+    known = {s["key"] for s in raw["statuses"]}
+    check("durum akisi kapali", reachable <= known, str(reachable - known))
+    check("yoklanan durumlar listeleniyor",
+          set(domain.ACTIVE_STATUSES) <= set(domain.LISTABLE_STATUSES))
+
+    # store.py'nin kullandigi tablo isimleri sozlesmeden gelmeli.
+    check("tablo isimleri sozlesmeden", domain.ORDERS_TABLE == raw["tables"]["orders"])
+
+    # --- Oyunlar ---------------------------------------------------------
+    # Bot yalnizca Valorant'i takip edebiliyor; digerlerinin mac basina
+    # ilerleme veren API'si yok. Filtre kayarsa bot bir Rocket League
+    # siparisinin "Grand Champion II" hedefini Valorant rank'i sanip her turda
+    # hata uretir.
+    check("yalnizca valorant takip ediliyor", domain.TRACKED_GAMES == ("valorant",),
+          str(domain.TRACKED_GAMES))
+    check("varsayilan oyun valorant", domain.DEFAULT_GAME == "valorant")
+    check("poll sorgusu oyuna gore suzuyor",
+          "valorant" in store_mod._TRACKED_GAME_FILTER)
+
+    game_ids = [g["id"] for g in raw["games"]]
+    check("oyun id'leri benzersiz", len(game_ids) == len(set(game_ids)), str(game_ids))
+
+    for g in raw["games"]:
+        ladder = domain.PANEL_RANK_ORDER if g["ranks"] is None else g["ranks"]
+        check(f"{g['id']}: rank listesi benzersiz",
+              len(ladder) == len(set(ladder)),
+              str([r for r in ladder if ladder.count(r) > 1][:3]))
+
+    # Rank isimleri oyunlar arasinda ORTUSUYOR ve bu kacinilmaz: OW2'nin
+    # "Bronze 3"u ile Valorant'in "Bronze 3"u ayni yaziliyor, anlamlari farkli
+    # (OW2'de bolumler 5'ten 1'e iner). Yani parse_rank etikete bakarak oyunu
+    # ayirt EDEMEZ - koruma etiket duzeyinde degil, sorgu duzeyinde: bot
+    # takip edilmeyen oyunlarin siparisini hic gormuyor.
+    # Bunun davranissal karsiligi test_game_filter() icinde.
+    ortusen = {r for g in raw["games"] if g["ranks"] for r in g["ranks"]} & set(domain.PANEL_RANK_ORDER)
+    check(f"rank isimleri oyunlar arasi ortusuyor ({len(ortusen)} etiket) - filtre sart",
+          bool(ortusen))
+
+    # Elo -> rank formulu iki dilde ayri yazili (ranks.py ve panelin
+    # rankFromElo'su). Sabitler ortak ama formuller degil - biri digerinden
+    # ayrilirsa panel musteriye botun soyledigi rank'tan baskasini gosterir.
+    # node yoksa kontrol atlanir; testin geri kalani agsiz calismaya devam eder.
+    if shutil.which("node") is None:
+        print("  --  node yok, JS/Python elo karsilastirmasi atlandi")
+        return
+
+    probes = list(range(0, 2900, 37)) + [0, 99, 100, 1538, 2099, 2100, 2291, 2400, 2699, 2700]
+    script = (
+        f"{(root / 'panel' / 'js' / 'domain.generated.js').read_text(encoding='utf-8')}\n"
+        f"const out = {json.dumps(probes)}.map(e => {{const r = rankFromElo(e); "
+        "return [e, r.tier, r.rr];});\n"
+        "console.log(JSON.stringify(out));"
+    )
+    proc = subprocess.run([shutil.which("node"), "-e", script], capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise AssertionError(f"panelin elo kodu calismadi: {proc.stderr.strip()[:300]}")
+
+    mismatches = []
+    for elo, js_tier, js_rr in json.loads(proc.stdout):
+        py_tier, py_rr = ranks.tier_from_elo(elo)
+        if (py_tier, py_rr) != (js_tier, js_rr):
+            mismatches.append(f"elo {elo}: py=({py_tier},{py_rr}) js=({js_tier},{js_rr})")
+    check(f"elo->rank JS ve Python ayni ({len(probes)} deger)",
+          not mismatches, "; ".join(mismatches[:4]))
+
+
+async def test_game_filter() -> None:
+    """Takip edilmeyen oyunlarin siparisi bota hic ulasmamali.
+
+    Panel artik Rocket League, OW2, Marvel Rivals ve Wild Rift siparisi de
+    tutuyor. Bunlarin rank etiketleri Valorant'inkilerle ortusebiliyor
+    ('Bronze 3' iki oyunda da var), o yuzden koruma etiketi ayristirmak degil
+    siparisi hic almamak. Filtre kayarsa bot bir RL siparisini Valorant sanip
+    hedefi yanlis hesaplar ya da her turda hata uretir.
+    """
+    print("\n[oyun filtresi]")
+    store = FakeStore()
+
+    store.add_order("aaaaaaaa-0000-0000-0000-000000000000", game="valorant")
+    # Takibi bekleyen bir RL siparisi: riot_id dolu, henuz baglanmamis.
+    store.add_order("bbbbbbbb-0000-0000-0000-000000000000", game="rl",
+                    tracked=False, riot_id="Boostcu#RL1",
+                    baslangic="Champion I", hedef="Grand Champion II")
+    # Takip ediliyor gorunen bir OW2 siparisi (elle yazilmis bir tracker_state).
+    store.add_order("cccccccc-0000-0000-0000-000000000000", game="ow2",
+                    baslangic="Platinum 3", hedef="Diamond 1")
+
+    trackable = await store.list_trackable()
+    check("yoklama yalnizca valorant aliyor",
+          [o["id"][:8] for o in trackable] == ["aaaaaaaa"],
+          str([(o["id"][:8], o["game"]) for o in trackable]))
+
+    pending = await store.list_pending_links()
+    check("otomatik baglama RL siparisini almiyor", pending == [],
+          str([(o["id"][:8], o["game"]) for o in pending]))
+
+    listed = await store.list_orders()
+    check("/liste takip disi oyunlari gostermiyor",
+          all(o["game"] in store_mod.TRACKED_GAMES for o in listed),
+          str([(o["id"][:8], o["game"]) for o in listed]))
+
+    # Poll turu RL/OW2 siparisleri yuzunden patlamamali.
+    henrik_fake = FakeHenrik()
+    henrik_fake.entries = [make_entry("m1", 20, 920, 5)]
+    sender = FakeSender()
+    dispatcher = Dispatcher()
+    dispatcher.register_telegram(sender, "OPS")
+    tracker_obj = Tracker(make_config(), henrik_fake, store, dispatcher)
+    await tracker_obj.poll_once()
+    check("poll turu takip disi siparislerle sorunsuz gecti", True)
+
+
+# --- doviz kuru ----------------------------------------------------------------
+
+
+async def test_fx() -> None:
+    """Kur cekimi: bicim degisirse ve servis duserse ne oluyor."""
+    print("\n[kur]")
+    import fx as fxmod
+
+    # Iki farkli servisin cevap bicimi.
+    check("frankfurter bicimi okunuyor",
+          fxmod._parse("frankfurter", "USD", {"rates": {"TRY": 41.25}}) == 41.25)
+    check("er-api bicimi okunuyor",
+          fxmod._parse("erapi", "USD", {"result": "success", "rates": {"TRY": 41.25}}) == 41.25)
+    # Bicim degisirse SESSIZCE yanlis sayi donmemeli.
+    check("beklenmeyen bicim None donuyor",
+          fxmod._parse("frankfurter", "USD", {"veri": {"TRY": 41}}) is None)
+    check("TRY alani yoksa None",
+          fxmod._parse("frankfurter", "USD", {"rates": {"EUR": 1.1}}) is None)
+    check("basarisiz er-api cevabi None",
+          fxmod._parse("erapi", "USD", {"result": "error", "rates": {"TRY": 41}}) is None)
+
+    class SahteResp:
+        def __init__(self, payload, status=200):
+            self._p, self.status_code = payload, status
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise httpx.HTTPStatusError("hata", request=None, response=None)
+
+        def json(self):
+            return self._p
+
+    class SahteClient:
+        def __init__(self, cevaplar):
+            self.cevaplar, self.istekler = list(cevaplar), []
+
+        async def get(self, url, **kw):
+            self.istekler.append(url)
+            c = self.cevaplar.pop(0)
+            if isinstance(c, Exception):
+                raise c
+            return c
+
+    # Ilk kaynak duserse ikinciye gecilmeli.
+    c = SahteClient([httpx.ConnectError("dustu"),
+                     SahteResp({"result": "success", "rates": {"TRY": 42.0}})])
+    sonuc = await fxmod.fetch_rate(c, "USD")
+    check("ilk kaynak duserse ikinci deneniyor", sonuc == (42.0, "erapi"), str(sonuc))
+    check("iki kaynak da denendi", len(c.istekler) == 2)
+
+    # Hicbiri vermezse None - uydurma kur YAZILMAMALI.
+    c = SahteClient([httpx.ConnectError("x"), httpx.ConnectError("y")])
+    check("hicbir kaynak vermezse None", await fxmod.fetch_rate(c, "USD") is None)
+
+    # Sifir/negatif kur veri hatasi; yazilirsa kar hesabi bozulur.
+    c = SahteClient([SahteResp({"rates": {"TRY": 0}}),
+                     SahteResp({"result": "success", "rates": {"TRY": 41.0}})])
+    sonuc = await fxmod.fetch_rate(c, "USD")
+    check("sifir kur reddediliyor, sonraki kaynaga geciliyor", sonuc == (41.0, "erapi"), str(sonuc))
+
+    # update_once: yazilamayan kur digerlerini engellememeli.
+    class SahteStore:
+        def __init__(self, patlayan=()):
+            self.yazilan, self.patlayan = [], set(patlayan)
+
+        async def save_fx_rate(self, currency, as_of, rate, source):
+            if currency in self.patlayan:
+                raise StoreError("yazilamadi")
+            self.yazilan.append((currency, rate, source))
+
+    st = SahteStore(patlayan={"USD"})
+    up = fxmod.FxUpdater(st)
+    c = SahteClient([SahteResp({"rates": {"TRY": 41.0}}), SahteResp({"rates": {"TRY": 47.0}})])
+    yazilan = await up.update_once(c)
+    check("yazilamayan kur digerini engellemiyor",
+          yazilan == {"EUR": 47.0} and st.yazilan == [("EUR", 47.0, "frankfurter")],
+          f"{yazilan} / {st.yazilan}")
+
+    # Kur cekilemezse ESKI kur silinmemeli: update_once hicbir DELETE yapmiyor.
+    st2 = SahteStore()
+    c2 = SahteClient([httpx.ConnectError("x"), httpx.ConnectError("y"),
+                      httpx.ConnectError("z"), httpx.ConnectError("w")])
+    check("kur alinamayinca hicbir sey yazilmiyor",
+          await fxmod.FxUpdater(st2).update_once(c2) == {} and st2.yazilan == [])
+
+    check("FX tablosu sozlesmeden", fxmod.FX_TABLE == "fx_rates")
+
+
 def main() -> int:
+    test_shared_contract()
+    asyncio.run(test_game_filter())
     test_ranks()
     test_store_helpers()
     asyncio.run(test_webhook_mode())
@@ -547,6 +805,7 @@ def main() -> int:
     asyncio.run(test_tracker())
     asyncio.run(test_season_change())
     asyncio.run(test_messages())
+    asyncio.run(test_fx())
     print(f"\n{len(PASSED)} kontrol gecti.\n")
     return 0
 

@@ -17,33 +17,42 @@ from typing import Any
 
 import httpx
 
+from domain import (
+    ACTIVE_STATUSES,
+    DEFAULT_GAME,
+    DEFAULT_REGION_API,
+    FX_TABLE,
+    LISTABLE_STATUSES,
+    MATCHES_TABLE,
+    ORDERS_TABLE,
+    PANEL_REGION_TO_API,
+    STATE_TABLE,
+    TRACKED_GAMES,
+)
+
 log = logging.getLogger(__name__)
 
-# Panelin bolge etiketleri -> HenrikDev bolge kodlari.
-# Turkiye Valorant'ta EU sunucularinda oynuyor.
-PANEL_REGION_TO_API = {
-    "TR": "eu", "EU": "eu", "NA": "na", "AP": "ap", "KR": "kr",
-    "LATAM": "latam", "BR": "br", "DIGER": "eu", "DIĞER": "eu",
-}
-
-# Yoklanan durumlar: is fiilen boostcuda. 'yeni' henuz atanmamis demek,
-# o yuzden poll edilmez - yoksa kimse oynamadigi icin 24 saat sonra bos yere
-# "takilma" uyarisi ureterek gurultu yapar.
-ACTIVE_STATUSES = ("atandi", "devam")
-
-# /liste ve /bagla'da gorunen durumlar. 'yeni' de dahil, boylece siparisi
-# boostciya atanmadan once hesaba baglayip hazir edebilirsin; atanip 'atandi'ya
-# gecince yoklama kendiliginden baslar.
-LISTABLE_STATUSES = ("yeni", "atandi", "devam")
+# Tablo isimleri, bolge eslemesi ve durum listeleri shared/domain.json'dan
+# geliyor - panel de ayni dosyayi okuyor. Panelde bir durum yeniden
+# adlandirildiginda tracker'in sessizce yoklamayi birakmasi boyle onleniyor.
+__all__ = [
+    "ACTIVE_STATUSES", "DEFAULT_GAME", "LISTABLE_STATUSES", "PANEL_REGION_TO_API",
+    "TRACKED_GAMES", "Store", "StoreError", "handle_of", "panel_region_to_api",
+]
 
 HANDLE_LEN = 8
 MIN_HANDLE_LEN = 4
 
+# Panel birden fazla oyunun siparisini tutuyor ama bot yalnizca Valorant'i
+# takip edebiliyor. Bu filtre olmadan bot bir Rocket League siparisinin
+# "Grand Champion II" hedefini Valorant rank'i sanip her turda hata uretirdi.
+_TRACKED_GAME_FILTER = f"in.({','.join(TRACKED_GAMES)})"
+
 
 def panel_region_to_api(region: str | None) -> str:
     if not region:
-        return "eu"
-    return PANEL_REGION_TO_API.get(region.strip().upper(), "eu")
+        return DEFAULT_REGION_API
+    return PANEL_REGION_TO_API.get(region.strip().upper(), DEFAULT_REGION_API)
 
 
 def handle_of(order_id: str) -> str:
@@ -93,7 +102,7 @@ class Store:
 
     async def ping(self) -> int:
         """Baglantiyi dogrular, panel siparis sayisini doner."""
-        rows = await self._select("resells", {"select": "id"})
+        rows = await self._select(ORDERS_TABLE, {"select": "id"})
         return len(rows)
 
     # --- Siparisler ----------------------------------------------------------
@@ -104,7 +113,7 @@ class Store:
 
         messages.py ve tracker.py bu sozlugu order['alan'] seklinde okuyor.
         """
-        state = row.get("tracker_state") or {}
+        state = row.get(STATE_TABLE) or {}
         if isinstance(state, list):
             state = state[0] if state else {}
 
@@ -120,6 +129,7 @@ class Store:
             "tag": tag or "?",
             "panel_region": row.get("region"),
             "durum": row.get("durum"),
+            "game": row.get("game") or DEFAULT_GAME,
             "order_type": row.get("order_type"),
             "baslangic": row.get("baslangic"),
             "hedef": row.get("hedef"),
@@ -147,13 +157,14 @@ class Store:
             "customer_dc_channel": state.get("customer_dc_channel"),
         }
 
-    _SELECT = "*,tracker_state(*)"
+    _SELECT = f"*,{STATE_TABLE}(*)"
 
     async def list_trackable(self) -> list[dict]:
         """Poll dongusunun yoklayacagi siparisler: panelde aktif, bagli, duraklatilmamis."""
-        rows = await self._select("resells", {
+        rows = await self._select(ORDERS_TABLE, {
             "select": self._SELECT,
             "durum": f"in.({','.join(ACTIVE_STATUSES)})",
+            "game": _TRACKED_GAME_FILTER,
             "archived": "eq.false",
             "order": "created_at.desc",
         })
@@ -162,9 +173,10 @@ class Store:
 
     async def list_orders(self, *, only_tracked: bool = False) -> list[dict]:
         """Panelde acik tum siparisler ('yeni' dahil, bagli olmayanlar dahil)."""
-        rows = await self._select("resells", {
+        rows = await self._select(ORDERS_TABLE, {
             "select": self._SELECT,
             "durum": f"in.({','.join(LISTABLE_STATUSES)})",
+            "game": _TRACKED_GAME_FILTER,
             "archived": "eq.false",
             "order": "created_at.desc",
         })
@@ -177,9 +189,10 @@ class Store:
         Tracker bunlari her turda kendiliginden baglar; panele nick yazmak
         yeterli olsun diye.
         """
-        rows = await self._select("resells", {
+        rows = await self._select(ORDERS_TABLE, {
             "select": self._SELECT,
             "durum": f"in.({','.join(ACTIVE_STATUSES)})",
+            "game": _TRACKED_GAME_FILTER,
             "archived": "eq.false",
             "order": "created_at.desc",
         })
@@ -192,7 +205,7 @@ class Store:
         if len(handle) < MIN_HANDLE_LEN:
             return None
 
-        rows = await self._select("resells", {"select": self._SELECT, "order": "created_at.desc"})
+        rows = await self._select(ORDERS_TABLE, {"select": self._SELECT, "order": "created_at.desc"})
         matches = [
             r for r in rows
             if str(r.get("id", "")).replace("-", "").lower().startswith(handle.replace("-", ""))
@@ -202,16 +215,30 @@ class Store:
         return self._shape(matches[0])
 
     async def find_by_puuid(self, puuid: str) -> dict | None:
-        rows = await self._select("tracker_state", {"select": "order_id", "puuid": f"eq.{puuid}"})
+        rows = await self._select(STATE_TABLE, {"select": "order_id", "puuid": f"eq.{puuid}"})
         if not rows:
             return None
         return await self.get_order(handle_of(rows[0]["order_id"]))
 
     async def set_riot_id(self, order_id: str, riot_id: str | None) -> None:
         await self._request(
-            "PATCH", "/resells",
+            "PATCH", f"/{ORDERS_TABLE}",
             params={"id": f"eq.{order_id}"},
             json={"riot_id": riot_id},
+        )
+
+    # --- Doviz kurlari -------------------------------------------------------
+
+    async def save_fx_rate(self, currency: str, as_of, rate: float, source: str) -> None:
+        """Gunun kurunu yazar. (currency, as_of) birincil anahtar oldugu icin
+        ayni gun ikinci cagri kopya satir birakmadan uzerine yaziyor."""
+        await self._request(
+            "POST", f"/{FX_TABLE}",
+            headers={"Prefer": "resolution=merge-duplicates"},
+            json={
+                "currency": currency, "as_of": str(as_of),
+                "rate": round(float(rate), 4), "source": source,
+            },
         )
 
     # --- tracker_state -------------------------------------------------------
@@ -222,7 +249,7 @@ class Store:
     ) -> None:
         """Siparisi bir hesaba baglar (upsert)."""
         await self._request(
-            "POST", "/tracker_state",
+            "POST", f"/{STATE_TABLE}",
             headers={"Prefer": "resolution=merge-duplicates"},
             json={
                 "order_id": order_id, "puuid": puuid, "region": region,
@@ -233,8 +260,8 @@ class Store:
 
     async def unlink(self, order_id: str) -> None:
         """Takibi kaldirir. Maclar da silinir; siparisin kendisine dokunulmaz."""
-        await self._request("DELETE", "/tracker_matches", params={"order_id": f"eq.{order_id}"})
-        await self._request("DELETE", "/tracker_state", params={"order_id": f"eq.{order_id}"})
+        await self._request("DELETE", f"/{MATCHES_TABLE}", params={"order_id": f"eq.{order_id}"})
+        await self._request("DELETE", f"/{STATE_TABLE}", params={"order_id": f"eq.{order_id}"})
 
     async def update_state(self, order_id: str, **fields: Any) -> None:
         if not fields:
@@ -249,7 +276,7 @@ class Store:
         if unknown:
             raise ValueError(f"Bilinmeyen alan(lar): {', '.join(sorted(unknown))}")
         await self._request(
-            "PATCH", "/tracker_state",
+            "PATCH", f"/{STATE_TABLE}",
             params={"order_id": f"eq.{order_id}"},
             json=fields,
         )
@@ -257,7 +284,7 @@ class Store:
     # --- Maclar --------------------------------------------------------------
 
     async def known_match_ids(self, order_id: str) -> set[str]:
-        rows = await self._select("tracker_matches", {
+        rows = await self._select(MATCHES_TABLE, {
             "select": "match_id", "order_id": f"eq.{order_id}",
         })
         return {r["match_id"] for r in rows}
@@ -269,33 +296,33 @@ class Store:
             return 0
         payload = [{**m, "order_id": order_id} for m in matches]
         result = await self._request(
-            "POST", "/tracker_matches",
+            "POST", f"/{MATCHES_TABLE}",
             headers={"Prefer": "resolution=ignore-duplicates,return=representation"},
             json=payload,
         )
         return len(result) if isinstance(result, list) else 0
 
     async def unreported_matches(self, order_id: str) -> list[dict]:
-        return await self._select("tracker_matches", {
+        return await self._select(MATCHES_TABLE, {
             "select": "*", "order_id": f"eq.{order_id}", "reported": "eq.false",
             "order": "played_at.asc",
         })
 
     async def mark_reported(self, order_id: str) -> None:
         await self._request(
-            "PATCH", "/tracker_matches",
+            "PATCH", f"/{MATCHES_TABLE}",
             params={"order_id": f"eq.{order_id}", "reported": "eq.false"},
             json={"reported": True},
         )
 
     async def recent_matches(self, order_id: str, limit: int = 10) -> list[dict]:
-        return await self._select("tracker_matches", {
+        return await self._select(MATCHES_TABLE, {
             "select": "*", "order_id": f"eq.{order_id}",
             "order": "played_at.desc", "limit": str(limit),
         })
 
     async def match_stats(self, order_id: str) -> dict[str, int]:
-        rows = await self._select("tracker_matches", {
+        rows = await self._select(MATCHES_TABLE, {
             "select": "rr_change", "order_id": f"eq.{order_id}",
         })
         changes = [int(r.get("rr_change") or 0) for r in rows]

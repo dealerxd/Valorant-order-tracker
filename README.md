@@ -1,221 +1,137 @@
-# Valorant Sipariş Takip Botu
+# HILL Boosting
 
-HILL Boosting panelindeki siparişlerin maç maç ilerleyişini HenrikDev API'sinden
-çekip Telegram ve Discord üzerinden müşteriye rapor eden bot. Hesap şifresine
-ihtiyaç duymaz — takip PUUID üzerinden yapılır, hesap kimde olursa olsun çalışır.
+Valorant boost işinin iki parçası tek depoda: siparişlerin açıldığı **panel** ve
+siparişleri maç maç takip edip müşteriye rapor eden **tracker**.
 
-## Panelle ilişkisi
+```
+panel/     Statik site (HTML/CSS/JS) — Supabase'e doğrudan bağlanır
+tracker/   Python bot (Telegram + Discord) — Supabase'i service_role ile okur
+shared/    İkisinin ortak sözleşmesi
+```
 
-**Siparişler panelde açılır, bot sipariş oluşturmaz.** Bot mevcut bir siparişi bir
-Valorant hesabına *bağlar*; hedef rank, bölge ve not panelden okunur.
+## Neden tek depo
 
-Bağlama **otomatiktir**: panelde sipariş `atandi`/`devam` durumundayken Riot ID
-alanına nick girmen (ya da boostçunun girmesi) yeterli — bot bir sonraki turda
-kendiliğinden hesabı çözüp takibi başlatır. `/bagla` komutu duruyor ama zorunlu
-değil, sadece anında bağlamak istediğinde kullanılıyor.
+İkisi aynı Supabase şemasını paylaşıyor. Panel `resells` tablosuna siparişi
+yazar, tracker aynı satırı okur:
 
-Nick hatalıysa bot bir kez dener, sana hatayı bildirir ve **Riot ID alanını
-temizler** — yoksa her turda aynı hatayı tekrar bildirip kanalı doldururdu.
-
-| Nerede | Ne tutulur |
+| Panelin yazdığı | Tracker'ın kullanımı |
 |---|---|
-| `resells` (panel) | Siparişin kendisi + `riot_id` (takip edilecek hesabın Riot ID'si) |
-| `tracker_state` | Takip durumu: PUUID, başlangıç/hedef/güncel elo, müşteri kanalları |
-| `tracker_matches` | Çekilen competitive maçlar |
+| `durum` (`atandi` / `devam`) | Hangi siparişlerin yoklanacağı |
+| `baslangic` / `hedef` (`Plat 1`, `Diamond 3`…) | Hedef elo hesabı |
+| `region` (`TR` / `EU` / `NA` / `Diğer`) | HenrikDev bölge kodu |
+| `riot_id` | Takip edilecek hesap |
 
-Müşteri bildirim kanalları `tracker_state`'te durur, `resells`'e taşınmaz — panelde
-müşteri bilgisi bilerek tutulmuyor.
+Ayrı depolardayken bu listeler iki tarafta elle senkron tutuluyordu (bölge
+listesi üç yerde: panel HTML'i, panel JS'i, tracker'ın `store.py`'si). Panelde
+bir durum yeniden adlandırılsa tracker **hata vermeden** yoklamayı keserdi —
+sipariş takip ediliyor görünür, hiç bildirim gelmezdi.
 
-Bot yalnızca `durum` alanı **`atandi`** veya **`devam`** olan, arşivlenmemiş ve bir
-hesaba bağlanmış siparişleri yoklar.
+## Oyunlar
 
-## Ne yapar
+Panel beş oyunun siparişini tutuyor; **bot yalnızca Valorant'ı takip ediyor.**
 
-**Müşteriye giden bildirimler**
+| Oyun | Panel | Takip botu |
+|---|---|---|
+| Valorant | ✓ | ✓ maç maç RR |
+| Overwatch 2 · Marvel Rivals · Rocket League · Wild Rift | ✓ | — |
 
-| Olay | Ne zaman |
-|---|---|
-| Rank atlama / düşme | Tier değiştiği anda |
-| Seans özeti | Son maçtan 20 dk geçince, o seansın tüm maçları tek mesajda |
-| Sipariş tamamlandı | Güncel elo hedefe ulaşınca |
+Diğerlerinin maç başına ilerleme veren bir API'si yok (gerekçe:
+[`tracker/README.md`](tracker/README.md)). Bu oyunlarda panel sipariş, fiyat ve
+booster yönetimi yapıyor, otomatik bildirim göndermiyor.
 
-Maç başına mesaj atılmaz. 3 saatlik bir seans müşteriye 6-8 ayrı bildirim yerine
-tek özet olarak gider.
+Ayrım `shared/domain.json` → `games[].tracked` bayrağında. Tracker poll
+sorgusu bu bayrağa göre süzüyor — filtre olmasa bot bir Rocket League
+siparişinin `Grand Champion II` hedefini Valorant rank'ı sanıp her turda hata
+üretirdi. Rank isimleri oyunlar arasında örtüşüyor (`Bronze 3` hem Valorant'ta
+hem OW2'de var, anlamları farklı), o yüzden koruma etiket değil sorgu
+düzeyinde.
 
-`MIRROR_TO_OPS=true` iken (varsayılan) müşteriye giden her mesajın kopyası
-operatör kanalına da düşer, başında sipariş kodu ve hesap adıyla. Müşteri kanalı
-henüz bağlanmamışsa kopya yine gelir ama `-> MUSTERI KANALI YOK` etiketiyle, yani
-rapor kaybolmaz. Müşteri kanalı zaten operatör kanalıysa çift gönderim olmaz.
+Yeni oyun eklemek: `domain.json` → `games` içine bir kayıt, `python
+shared/generate.py`. Şema değişmiyor, `resells.game` metin alanı.
 
-**Sadece sana giden uyarılar**
+## Ortak sözleşme
 
-- Üst üste 3 mağlubiyet (eşik ayarlanabilir)
-- 24 saattir hiç maç yok — boostçu takılmış olabilir
-- Act değişti — rank sıfırlandığı için takip otomatik duraklatılır
-- Riot ID çözülemedi — otomatik bağlama başarısız oldu
-- Supabase / API hataları
+`shared/domain.json` tek kaynak. Rank tablosu, bölge eşlemesi, sipariş
+durumları ve tablo isimleri orada.
 
-Sipariş tamamlanınca bot takibi durdurur ve sana haber verir, ama **paneldeki
-`durum` alanına dokunmaz** — "Tamam"a almak sende.
+```
+shared/domain.json
+      │
+      ├──> tracker/domain.py           (import anında okur)
+      │
+      └──> shared/generate.py ──> panel/js/domain.generated.js
+```
 
-## Kurulum
+Panel statik bir site olduğu için sözleşmeyi tarayıcıda `fetch` ile okumuyor;
+üretilen JS dosyası repoya commit'li, panelin açılışı ek bir isteğe bağlı değil.
+
+**Sözleşmeyi değiştirdikten sonra:**
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
+python shared/generate.py
+```
+
+Unutursan `tracker/test_smoke.py` yakalar — üretilmiş dosya kaynakla
+uyuşmuyorsa test başarısız olur.
+
+Sözleşme sadece liste tutmuyor, tutarlılığı da kontrol ediyor: yoklanan ama
+listelenmeyen bir durum ya da var olmayan bir duruma giden `next` alanı
+tracker'ı açılışta durdurur.
+
+## Geliştirme
+
+```bash
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env                                 # doldur
+
+python tracker/main.py          # tracker'ı çalıştır
+python tracker/test_smoke.py    # testler (ağa çıkmaz, Supabase gerektirmez)
 ```
 
-`.env.example` dosyasını `.env` olarak kopyala ve doldur.
+Panel için kurulum yok: `panel/index.html` dosyasını tarayıcıda aç.
 
-### 1. Supabase service_role anahtarı
+Ayrıntılı dokümanlar: [`tracker/README.md`](tracker/README.md) ·
+[`panel/README.md`](panel/README.md)
 
-Dashboard → Project Settings → API Keys → **service_role**. `SUPABASE_SERVICE_KEY`'e yaz.
+## Yayınlama
 
-Bu anahtar RLS'i baypas eder — sadece bu daemon'da, `.env` içinde dursun. Panele
-veya repoya asla koyma. (`config.py` publishable anahtar verilirse başlamayı reddeder.)
+İki parça ayrı yerlere, aynı depodan deploy oluyor:
 
-### 2. HenrikDev API anahtarı
+| Parça | Nereye | Ayar |
+|---|---|---|
+| `panel/` | Cloudflare Pages | Build output directory = `panel` |
+| `tracker/` | Railway | `railway.json` → `python tracker/main.py` |
 
-https://api.henrikdev.xyz/dashboard/ adresinden alınıyor, Discord üyeliği gerekiyor.
+### Cloudflare Pages ayarı
 
-- **Basic key**: 30 istek/dakika — bu bot için yeterli
-- **Enhanced key**: 90 istek/dakika — 40+ eşzamanlı aktif sipariş varsa
+Panel deponun kökünde değil, `panel/` altında. Pages projesinin bunu bilmesi
+gerekiyor — bu ayar dashboard'da duruyor, repodaki hiçbir dosyadan
+değiştirilemiyor:
 
-Bot her isteği 2 birim sayarak güvenli tarafta kalıyor (HenrikDev cache miss'lerde
-çift sayım yapıyor).
-
-### 3. Telegram
-
-1. [@BotFather](https://t.me/botfather) → `/newbot` → token'ı `TELEGRAM_BOT_TOKEN`'a yaz
-2. Botu operatör grubuna ekle, grupta `/yardim` yaz — bot chat ID'sini söyler
-3. O ID'yi `TELEGRAM_OPS_CHAT_ID`'ye, kendi kullanıcı ID'ni `TELEGRAM_ADMIN_IDS`'e yaz
-
-### 4. Discord
-
-1. [Developer Portal](https://discord.com/developers/applications) → New Application → Bot → token
-2. OAuth2 → URL Generator → scope `bot` + `applications.commands`, izin `Send Messages`
-3. Kanal ID'sini `DISCORD_OPS_CHANNEL_ID`'ye, sunucu ID'sini `DISCORD_GUILD_ID`'ye yaz
-
-Ayrıcalıklı intent'e gerek yok — slash komutları kullanılıyor.
-
-### Yetkilendirme
-
-`*_ADMIN_IDS` boş bırakılırsa bot **yalnızca operatör kanalında** komut kabul eder.
-Müşteri sohbetlerinde `/musteri` çalıştırabilmek için kendi ID'ni admin listesine ekle.
-
-## Çalıştırma
-
-```bash
-python main.py
-```
-
-Her iki bot ve poll döngüsü aynı süreçte çalışır. Başlangıçta Supabase bağlantısı
-doğrulanır; başarısızsa bot açılmaz.
-
-## Komutlar
-
-Telegram'da `/bagla ...`, Discord'da aynı isimli slash komutları.
-
-| Komut | Açıklama |
+| Alan | Değer |
 |---|---|
-| `/liste` | Paneldeki aktif siparişler + takip durumları |
-| `/bagla <kod> <isim#tag>` | Siparişi bir hesaba bağlar, takibi başlatır |
-| `/durum <kod>` | Detay, ilerleme çubuğu, son maçlar |
-| `/musteri <kod>` | Bu sohbeti siparişin müşteri kanalı yapar |
-| `/musteri <kod> kapat` | Müşteri bildirimini kapatır |
-| `/duraklat <kod>` / `/devam <kod>` | Takibi durdurur / başlatır |
-| `/kaldir <kod>` | Takibi ve maç kayıtlarını siler (panele dokunmaz) |
-| `/yardim` | Komut listesi |
+| Repository | `dealerxd/Valorant-order-tracker` |
+| Production branch | `main` |
+| Framework preset | None |
+| Build command | *(boş)* |
+| **Build output directory** | **`panel`** |
+| Root directory (advanced) | `/` — dokunma |
 
-`<kod>` sipariş UUID'sinin ilk 8 karakteri. `/liste` ile görürsün.
+Build command'in boş olması doğru: panel statik, derleme adımı yok. Dosyalar
+oldukları gibi yayınlanıyor.
 
-### Tipik akış
+Deploy sonrası hızlı kontrol: giriş yap, bir siparişi aç, **Bölge** ve **Durum**
+açılır listelerine bak. İkisi de `js/domain.generated.js`'ten dolduruluyor —
+doluysa sözleşme tarayıcıya ulaşmış demektir. Boşsa üretilmiş dosya
+yüklenmemiştir.
 
-1. Sipariş panelde açılır, boostçuya atanır (`durum: atandi`)
-2. Panelde **Riot ID** alanına hesabın nick'i girilir (sen ya da boostçu)
-3. Bot 5 dakika içinde kendiliğinden bağlar, sana "takibe alındı" bildirimi gelir
-4. Müşterinin sohbetine gidip `/musteri <kod>` — kod bildirimde yazıyor
-5. Gerisi otomatik
+Railway tarafında ek iş yok: `requirements.txt` ve `.python-version` Nixpacks
+bulsun diye kökte bırakıldı.
 
-Adım 3'ü beklemek istemezsen `/liste` ile kodu alıp `/bagla <kod> <isim#tag>`
-diyebilirsin; sonuç aynı.
+## Anahtarlar
 
-## Test
-
-```bash
-python test_smoke.py
-```
-
-Ağa çıkmaz, Supabase gerektirmez — hem API istemcisi hem veri deposu sahte
-nesnelerle değiştirilir, olay tespiti ve mesaj üretimi gerçek kodla çalışır.
-
-Gerçek bir hesapta okuma hattını doğrulamak için (bot token'ı gerekmez):
-
-```bash
-python check_account.py Player#TR1 eu
-```
-
-## Nasıl çalışıyor
-
-`POLL_INTERVAL_SECONDS` (varsayılan 300) aralıklarla
-`/valorant/v2/by-puuid/mmr-history/{region}/{platform}/{puuid}` çağrılır. Bu endpoint
-zaten yalnızca competitive maçları döndürür; unrated ve deathmatch otomatik elenir.
-
-İlerleme HenrikDev'in `elo` alanı üzerinden hesaplanır:
-
-```
-elo = (tier_id - 3) * 100 + rr        # Diamond 1 (tier 18), 38 RR -> 1538
-ilerleme = (güncel_elo - başlangıç_elo) / (hedef_elo - başlangıç_elo)
-```
-
-Panelin bölge etiketleri API koduna çevrilir: `TR`/`EU` → `eu`, `NA` → `na`,
-`Diğer` → `eu` (Türkiye Valorant'ta EU sunucularında oynuyor).
-
-**Başlangıç çizgisi:** `/bagla` sonrasındaki ilk poll'de API'nin döndürdüğü geçmiş
-(son ~20 maç) sipariş açılmadan önce oynanmış maçlardır. Bot bunları sessizce
-kaydeder ve raporlanmış sayar — müşteriye kendi siparişi olmayan bir "20 maç
-oynandı" özeti gitmez. Bildirimler ikinci poll'den itibaren başlar.
-
-**Durum filtreleri:** `/liste` ve `/bagla` `yeni`/`atandi`/`devam` siparişlerini
-görür (siparişi boostçuya atanmadan önce hazır edebilirsin), ama poll döngüsü
-yalnızca `atandi`/`devam` olanları yoklar — `yeni` bir sipariş kimse oynamadığı
-için boş yere "takılma" uyarısı üretirdi.
-
-## Dosyalar
-
-| Dosya | İşlevi |
-|---|---|
-| `main.py` | Giriş noktası, botları ve poll döngüsünü birlikte çalıştırır |
-| `tracker.py` | Poll döngüsü ve olay tespiti |
-| `store.py` | Supabase veri katmanı (PostgREST) |
-| `henrik.py` | HenrikDev istemcisi, rate limiter, 429/retry |
-| `commands.py` | Platformdan bağımsız komut mantığı |
-| `bot_telegram.py` / `bot_discord.py` | Komut arayüzleri ve gönderici |
-| `notify.py` | Bildirim dağıtıcı (müşteri / operatör ayrımı) |
-| `messages.py` | Mesaj metinleri |
-| `ranks.py` | Tier tabloları ve elo aritmetiği |
-| `check_account.py` | Tek hesapta okuma hattını doğrulayan araç |
-| `test_smoke.py` | Ağa çıkmayan duman testi |
-
-## Bilinen sınırlar
-
-**`mmr-history` sınırlı bir pencere döndürür.** Poll aralığını çok açarsan yoğun
-oynanan bir hesapta aradaki maçlar kaçabilir. 5 dakika güvenli; 30 dakikanın
-üzerine çıkma.
-
-**Radiant hedefli siparişlerde ilerleme yüzdesi yaklaşıktır.** Immortal 3'ün
-üzerinde sıralama leaderboard'a bağlı; bot bu durumda mesaja uyarı notu ekler.
-
-**Act geçişinde müdahale gerekir.** Bot maçların `season` alanını izler; act
-değiştiğinde takibi duraklatıp sana haber verir ve müşteriye yanlış "rank düştü"
-mesajı gitmesini engeller. Başlangıç elo'su geçersiz kaldığı için
-`/kaldir` + `/bagla` ile yeni baseline'la bağlaman gerekir.
-
-**Immortal'da RR farklı sayılır.** Alt rank'larda `rr` tier içinde 0–99 arası,
-Immortal ve üstünde Immortal 1 tabanından kümülatif ilerler (Immortal 2 / 191 RR
-→ elo 2291). `ranks.py` bunu ayrı ele alıyor.
-
-**Panelde Iron ve Radiant yok.** `RANK_ORDER` Bronze 1'de başlayıp Immortal 3'te
-bitiyor. Tracker ikisini de destekliyor ama panelde karşılığı olmayan bir hedef
-girilemez.
+Panel `sb_publishable_` anahtarını kullanır (RLS arkasında, tarayıcıda durması
+normal). Tracker `service_role` anahtarını kullanır — **RLS'i baypas eder**,
+sadece `.env` içinde, sadece sunucuda. `tracker/config.py` yanlışlıkla
+publishable anahtar verilirse başlamayı reddeder.
