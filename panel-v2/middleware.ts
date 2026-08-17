@@ -49,8 +49,13 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /* Everything except static assets, images and the API routes (those
-       carry their own CRON_SECRET guard). */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    /* Everything except static assets and the API routes (those carry their
+       own CRON_SECRET guard).
+
+       The font extensions matter: the self-hosted woff2 files live under
+       /public/fonts, so without them here every font request would be run
+       through the auth guard and redirected to /login for a signed-out
+       visitor — leaving the login page unable to load its own fonts. */
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|eot)$).*)',
   ],
 };
