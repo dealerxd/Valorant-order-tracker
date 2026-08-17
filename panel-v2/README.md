@@ -32,9 +32,14 @@ The Vercel project must be created from the git repo with **root directory
 `panel-v2`** — the repo also holds `panel/`, `tracker/` and `shared/`, so a
 root-level build finds no Next.js app.
 
-The project already exists: **`resell-bot-panel-v2`**
+The project already exists and **builds green**: **`resell-bot-panel-v2`**
 (`prj_bNDYKPc7UpDrRwgk1smXQzGnPnt8`), linked to the repo with root directory
-`panel-v2` and Node 24.x. What is left:
+`panel-v2`, Node 24.x. Branch preview:
+
+    https://resell-bot-panel-v2-git-1418a8-tepetarik213-gmailcoms-projects.vercel.app
+
+Every page currently answers `500 MIDDLEWARE_INVOCATION_FAILED` — that is the
+missing Supabase env vars and nothing else. What is left:
 
 1. Add the environment variables below in the Vercel dashboard, for
    Production *and* Preview. Nothing else blocks a working deploy.
