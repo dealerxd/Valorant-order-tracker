@@ -68,6 +68,9 @@ function switchTab(t){
   if(t === 'odeme')      renderPayments();
   if(t === 'rapor')      renderReport();
   if(t === 'arsiv')      renderArchive();
+  // Her sekme kendi kendine yetmeli: eskiden yalnizca loadAll() ciziyordu,
+  // sekmeye gecmek bayat DOM gosteriyordu.
+  if(t === 'boosterlar' && isAdmin()){ renderBoosters(); renderInvites(); }
   if(t === 'fiyat')      renderPriceTables();
   if(t === 'profil')     fillProfileForm();
 

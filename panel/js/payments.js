@@ -38,6 +38,27 @@ function odemeSaticiGruplari(){
   return Object.values(gruplar).sort((a,b) => b.tl - a.tl);
 }
 
+/* Ödeme kanalı: kime, nereden ödeyeceksin. Profilden geliyor (boosters.js
+   ile aynı alanlar) — iki yerde ayrı ayrı tutulsaydı biri güncellenip diğeri
+   eski kalırdı. IBAN'ı yoksa bunu ekranda söylüyoruz; ödeme günü "IBAN neydi"
+   diye Discord'da aramak bu ekranın var oluş sebebine aykırı. */
+function odemeKanali(boosterId){
+  const p = people.find(x => x.id === boosterId) || {};
+  if(p.iban)        return { etiket:'IBAN',   deger:p.iban };
+  if(p.crypto_addr) return { etiket:'Kripto', deger:p.crypto_addr };
+  return { etiket:'', deger:'', eksik:true };
+}
+
+/* Seçilen satırlar. Ödeme günü genelde birkaç kişiye birden yapılıyor;
+   "bu turda ne kadar çıkacak" sorusunun cevabı seçim toplamı. */
+const odemeSecim = new Set();
+
+function odemeSec(anahtar, on){
+  if(on) odemeSecim.add(anahtar); else odemeSecim.delete(anahtar);
+  renderPayments();
+}
+function odemeSecTemizle(){ odemeSecim.clear(); renderPayments(); }
+
 /* Bir boostçunun tüm bekleyen işlerini ödendi işaretler. */
 async function odeBooster(boosterId){
   const isler = odemeBoosterGruplari().find(g => g.id === boosterId);
@@ -87,11 +108,18 @@ function renderPayments(){
     <div class="ov-card"><div class="ov-h">${esc(baslik)}</div>
       ${satirlar || `<div class="ov-empty">${esc(bosMetin)}</div>`}</div>`;
 
-  const boosterHTML = grupKart('Boosterlara', bst.map(g => `
-    <div class="pay-row">
+  const boosterHTML = grupKart('Boosterlara', bst.map(g => {
+    const k = odemeKanali(g.id), an = 'b:' + g.id, sec = odemeSecim.has(an);
+    return `
+    <div class="pay-row${sec ? ' sel' : ''}">
+      <label class="pay-chk"><input type="checkbox" ${sec?'checked':''}
+        onchange="odemeSec('${esc(an)}',this.checked)"></label>
       <div class="pay-who">
         <div class="pay-name">${esc(g.ad)}</div>
-        <div class="pay-sub">${g.isler.length} iş</div>
+        <div class="pay-sub">${g.isler.length} iş · ${k.eksik
+          ? '<span class="warn">ödeme bilgisi girilmemiş</span>'
+          : `${esc(k.etiket)} <span class="mono">${esc(k.deger)}</span>
+             <button class="copy" data-v="${esc(k.deger)}" onclick="copyText(this)" title="Kopyala">📋</button>`}</div>
       </div>
       <div class="pay-amt">${fmt(g.toplam,'TRY')}</div>
       <button class="icon-btn go" onclick="odeBooster('${esc(g.id)}')">💰 Ödendi</button>
@@ -99,14 +127,18 @@ function renderPayments(){
     <div class="pay-jobs">${g.isler.map(r =>
       `<button class="pay-job" onclick="openDetail('${esc(r.id)}')">
          <span class="pay-job-r">${routeHTML(r)}</span>
-         <span class="pay-job-a">${fmt(r.payout,'TRY')}</span></button>`).join('')}</div>`).join(''),
-    'Bekleyen booster ödemesi yok.');
+         <span class="pay-job-a">${fmt(r.payout,'TRY')}</span></button>`).join('')}</div>`;
+  }).join(''), 'Bekleyen booster ödemesi yok.');
 
-  const saticiHTML = grupKart('Dış satıcılara', sat.map(g => `
-    <div class="pay-row">
+  const saticiHTML = grupKart('Dış satıcılara', sat.map(g => {
+    const an = 'v:' + g.ad, sec = odemeSecim.has(an);
+    return `
+    <div class="pay-row${sec ? ' sel' : ''}">
+      <label class="pay-chk"><input type="checkbox" ${sec?'checked':''}
+        onchange="odemeSec('${esc(an)}',this.checked)"></label>
       <div class="pay-who">
         <div class="pay-name">🏷 ${esc(g.ad)}</div>
-        <div class="pay-sub">${g.isler.length} iş</div>
+        <div class="pay-sub">${g.isler.length} iş · satıcının kendi kanalı</div>
       </div>
       <div class="pay-amt">${Object.entries(g.dovizler).map(([k,v]) => fmt(v,k)).join(' + ')}
         ${g.tl ? `<span class="pay-tl">≈ ${fmt(g.tl,'TRY')}</span>` : ''}</div>
@@ -115,8 +147,21 @@ function renderPayments(){
     <div class="pay-jobs">${g.isler.map(r =>
       `<button class="pay-job" onclick="openDetail('${esc(r.id)}')">
          <span class="pay-job-r">${routeHTML(r)}</span>
-         <span class="pay-job-a">${fmt(r.vendorCost, r.vendorCur)}</span></button>`).join('')}</div>`).join(''),
-    'Bekleyen satıcı ödemesi yok.');
+         <span class="pay-job-a">${fmt(r.vendorCost, r.vendorCur)}</span></button>`).join('')}</div>`;
+  }).join(''), 'Bekleyen satıcı ödemesi yok.');
 
-  box.innerHTML = kpi + uyari + `<div class="ov-grid">${boosterHTML}${saticiHTML}</div>`;
+  // Seçim çubuğu: bu turda ne kadar çıkacak. Kaybolmuş bir seçim (ödeme
+  // işaretlendi, satır listeden düştü) toplamı şişirmesin diye her çizimde
+  // hâlâ var olan anahtarlara kırpıyoruz.
+  const gecerli = new Set(bst.map(g => 'b:' + g.id).concat(sat.map(g => 'v:' + g.ad)));
+  [...odemeSecim].forEach(a => { if(!gecerli.has(a)) odemeSecim.delete(a); });
+  const secTutar = bst.filter(g => odemeSecim.has('b:' + g.id)).reduce((a,g) => a + g.toplam, 0)
+                 + sat.filter(g => odemeSecim.has('v:' + g.ad)).reduce((a,g) => a + g.tl, 0);
+  const secBar = odemeSecim.size
+    ? `<div class="pay-bar"><span class="bulk-n">${odemeSecim.size} seçili</span>
+        <span class="pay-bar-t">${fmt(secTutar,'TRY')}</span>
+        <button class="icon-btn" onclick="odemeSecTemizle()">temizle</button></div>`
+    : '';
+
+  box.innerHTML = kpi + uyari + secBar + `<div class="ov-grid">${boosterHTML}${saticiHTML}</div>`;
 }

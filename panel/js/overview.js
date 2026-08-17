@@ -12,6 +12,7 @@
 */
 
 const OV_TUR_ETIKET = {
+  gecikti:      'Geciken iş',
   atanmadi:     'Atanmadı',
   finansyok:    'Boost fiyatı yok',
   odenmedi:     'Ödenmedi',
@@ -95,6 +96,7 @@ function ovGames(){
    kritik uyarıyı ekrandan itiyordu. Grup açılabilir: sayıya tıklayınca
    içindekiler çıkıyor. */
 const OV_TUR_ALT = {
+  gecikti:      'teslim tarihi geçti',
   atanmadi:     'booster bekliyor',
   finansyok:    'kâra dahil edilmiyor',
   odenmedi:     'işi bitti, ödeme bekliyor',

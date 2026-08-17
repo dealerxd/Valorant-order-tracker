@@ -63,6 +63,29 @@ let gameScope = lsGet('gameScope', '');       // '' = hepsi
 const inScope   = r => !gameScope || r.game === gameScope;
 const scopeRecs = () => activeRecs().filter(inScope);
 
+/* --- Teslim tarihi ---------------------------------------------------------
+
+   Bugüne kadar bir işin geciktiğini yalnızca takip botunun "24 saattir maç
+   yok" uyarısından anlıyorduk — o da sadece Valorant'ta ve sadece Riot ID
+   bağlıysa çalışıyor. Rocket League siparişi süresiz duruyordu.
+
+   Tarih girilmemişse iş "süresiz": uydurma bir son tarih koymuyoruz.
+   Kapanmış işin gecikmesi de yok — teslim edildiyse konu kapanmıştır. */
+function teslim(r){
+  if(!r.dueAt || !isOpen(r)) return null;
+  const t = tsMs(r.dueAt);
+  if(t == null) return null;
+  // Gün bazında karşılaştırıyoruz, saat bazında değil: 15 Ağustos'a söz
+  // verilen iş 15 Ağustos boyunca geç sayılmamalı. tsMs zaten UTC'ye
+  // normalleştiriyor, iki taraf da aynı ölçekte.
+  const fark = Math.floor(t / 86400000) - Math.floor(Date.now() / 86400000);
+  if(fark < 0)  return { gec:true,  gun:-fark, metin:`${-fark} gün geç` };
+  if(fark === 0) return { gec:false, gun:0, metin:'bugün teslim' };
+  if(fark === 1) return { gec:false, gun:1, metin:'yarın teslim' };
+  return { gec:false, gun:fark, metin:`${fark} gün kaldı` };
+}
+const isGec = r => !!(teslim(r) || {}).gec;
+
 /* --- İlerleme -------------------------------------------------------------
 
    İki farklı şey tek çubukta gösterilemez: takip botunun ölçtüğü GERÇEK elo
@@ -122,7 +145,13 @@ function alertModel(){
   for(const r of activeRecs()){
     const t = tracker[r.id];
 
-    if(isActive(r) && !r.boosterId)
+    // Geciken iş en ağır uyarı: müşteri bekliyor ve haberin yok.
+    // Dışarıya verilmiş işte de geçerli — satıcı gecikirse müşteri seni arar.
+    const ts = teslim(r);
+    if(ts && ts.gec)
+      push('gecikti', 4, `#${r.id.slice(0,8)} ${ts.metin}`, r);
+
+    if(isActive(r) && !r.boosterId && !isDis(r))
       push('atanmadi', 2, `#${r.id.slice(0,8)} atanmadı`, r);
 
     // 'yeni' hariç: sipariş daha yeni açılmışken fiyatın girilmemiş olması

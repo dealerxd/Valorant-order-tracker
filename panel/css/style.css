@@ -105,6 +105,10 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;fl
 .toolbar input.search{flex:1;min-width:150px}
 
 .rec{background:#0e0e11;border:1px solid var(--line-soft);border-radius:12px;padding:15px 16px;margin-bottom:11px}
+/* Geciken iş kırmızı çerçeve — listede taranırken gözden kaçmasın. */
+.rec.gec,.bcard.gec{border-color:rgba(226,85,85,.4)}
+.chip.gec{border-color:rgba(226,85,85,.4);color:var(--red)}
+.chip.due{border-color:rgba(139,139,149,.35);color:var(--muted)}
 .rec.arch{opacity:.6}
 .rec-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
 .rec-route{font-family:'Oswald',sans-serif;font-size:17px;font-weight:600;letter-spacing:.4px}
@@ -539,7 +543,7 @@ input.sel{width:15px;height:15px;accent-color:var(--gold);cursor:pointer}
 .ov-alert-m{display:block;font-size:11px;color:var(--muted);margin-top:2px}
 .ov-alert-n{font-family:'Oswald',sans-serif;font-size:15px;color:var(--silver);
   background:#16161a;border:1px solid var(--line);border-radius:8px;padding:3px 10px}
-.ov-alert.takildi,.ov-alert.kayip{border-left-color:var(--red)}
+.ov-alert.gecikti,.ov-alert.takildi,.ov-alert.kayip{border-left-color:var(--red)}
 .ov-alert.atanmadi,.ov-alert.baglanmadi,.ov-alert.duraklatildi{border-left-color:var(--amber)}
 .ov-alert.finansyok,.ov-alert.odenmedi{border-left-color:var(--blue)}
 .ov-alert-list{display:flex;flex-direction:column;gap:3px;padding:2px 0 6px 13px}
@@ -600,7 +604,49 @@ input.sel{width:15px;height:15px;accent-color:var(--gold);cursor:pointer}
 /* ============ DIŞ KAYNAK + ÖDEMELER + SÜRÜKLE-BIRAK ============ */
 .chip.dis{border-color:rgba(224,165,52,.35);color:var(--amber);background:rgba(224,165,52,.08)}
 
+/* Drawer zaman çizelgesi */
+.tl{display:flex;flex-direction:column;gap:2px}
+.tl-row{display:flex;align-items:flex-start;gap:10px;padding:7px 0}
+.tl-row.ileri{opacity:.6}
+.tl-dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px;margin-top:5px;background:var(--muted)}
+.tl-dot.yeni{background:var(--muted)}
+.tl-dot.devam{background:var(--blue)}
+.tl-dot.tamam{background:var(--green)}
+.tl-dot.kayip{background:var(--red)}
+.tl-txt{flex:1;min-width:0;font-size:12.5px;color:var(--silver);line-height:1.45}
+.tl-who{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
+.tl-t{font-size:11px;color:var(--muted);white-space:nowrap}
+
+/* Boosterlar: doluluk çubuğu ve sayı kutuları */
+.bs-load{margin:12px 0 4px}
+.bs-load-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.bs-load-top b{font-family:'Oswald',sans-serif;font-size:14px;color:var(--silver);text-transform:none;letter-spacing:0}
+.bs-load-top b.dim{color:var(--muted);font-size:12px}
+.bs-load-bar{height:6px;background:#0a0a0b;border:1px solid var(--line-soft);border-radius:20px;overflow:hidden;margin-top:6px}
+.bs-load-bar span{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--gold))}
+.bs-load-bar span.full{background:var(--red)}
+.bs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px;margin-top:13px}
+.bs-cell{background:#0d0d0f;border:1px solid var(--line-soft);border-radius:10px;padding:9px 11px}
+.bs-l{display:block;font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.bs-v{display:block;font-family:'Oswald',sans-serif;font-size:16px;margin-top:3px}
+.bs-v.red{color:var(--red)}.bs-v.green{color:var(--green)}
+.chip.bs-busy{border-color:rgba(90,157,237,.35);color:var(--blue)}
+.chip.bs-free{border-color:rgba(62,207,142,.35);color:var(--green)}
+.chip.bs-off{color:var(--muted)}
+
 .pay-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line-soft)}
+.pay-row.sel{background:rgba(212,175,55,.05)}
+.pay-chk{display:flex;align-items:center}
+.pay-chk input{accent-color:var(--gold);width:15px;height:15px;cursor:pointer}
+.pay-sub .mono{font-family:ui-monospace,monospace;color:var(--silver)}
+.pay-sub .warn{color:var(--amber)}
+.pay-sub .copy{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0 2px}
+.pay-sub .copy:hover{color:var(--gold)}
+/* Seçim çubuğu: bu turda ne kadar çıkacak. */
+.pay-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;
+  background:#1f1c14;border:1px solid rgba(212,175,55,.35);border-radius:12px;padding:11px 16px}
+.pay-bar-t{font-family:'Oswald',sans-serif;font-size:18px;color:var(--gold);margin-left:auto}
 .pay-who{flex:1;min-width:0}
 .pay-name{font-size:13.5px;color:var(--text)}
 .pay-sub{font-size:11px;color:var(--muted);margin-top:2px}
@@ -619,4 +665,6 @@ input.sel{width:15px;height:15px;accent-color:var(--gold);cursor:pointer}
 /* Pano sürükle-bırak. Butonlu yol da duruyor — dokunmatikte DnD çalışmıyor. */
 .bcard[draggable=true]{cursor:grab}
 .bcard.dragging{opacity:.45;cursor:grabbing}
+/* Görsel bırakma hedefi — kart sürüklemesinden ayrı bir vurgu. */
+.bcard.shot-over{border-color:var(--green);box-shadow:inset 0 0 0 1px rgba(62,207,142,.35)}
 .bcol.over{border-color:var(--gold-soft);background:rgba(212,175,55,.06)}

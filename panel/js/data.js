@@ -10,6 +10,8 @@ function rowToRec(r){
     // Dış kaynak: iş bizde değil dışarıdaki bir satıcıda.
     vendor:r.vendor||'',vendorCost:Number(r.vendor_cost)||0,
     vendorCur:r.vendor_currency||'USD',vendorPaid:!!r.vendor_paid,
+    // Teslim tarihi (shared/migrations/003). Boş = süresiz.
+    dueAt:r.due_at||'',
     archived:!!r.archived,created:r.created_at||''};
 }
 /* Kusak sayaci: iki loadAll ust uste calisirsa gec donen BAYAT olan ekrani

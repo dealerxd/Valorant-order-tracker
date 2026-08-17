@@ -159,6 +159,8 @@ async function saveRecord(){
     note:document.getElementById('not').value.trim(),image:formImage||null,
     booster_id:document.getElementById('boosterSel').value||null,
     booster_payout:Number(document.getElementById('payout').value)||0,
+    // Bos birakilirsa NULL: uydurma bir son tarih koymuyoruz, is suresiz sayiliyor.
+    due_at:(isAdmin() && document.getElementById('dueAt').value) || null,
     ...disAlanlari()
   };
   if(type==='rank'){
@@ -237,6 +239,7 @@ function editRecord(id){
   const ds=document.getElementById('durum');ds.value=r.durum;
   if(ds.value!==r.durum) ds.value='tamam';   // eski 'odendi' durumu artık seçenek değil → Tamam'a düşür
   document.getElementById('tarih').value=r.tarih;
+  document.getElementById('dueAt').value=r.dueAt||'';
   document.getElementById('not').value=r.not;formImage=r.image;
   toggleImageField();showFormImage();onTypeChange();
   document.getElementById('formTitle').textContent='Siparişi Düzenle';
@@ -306,7 +309,7 @@ function resetForm(){
   const pb=document.getElementById('pasteBox');
   if(pb){ pb.value=''; onPasteChange(); }
   editId=null;formImage=null;
-  ['payout','not','cost','platformRef','rate','jobDesc','riotId'].forEach(i=>document.getElementById(i).value='');
+  ['payout','not','cost','platformRef','rate','jobDesc','riotId','dueAt'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('orderType').value='rank';
   document.getElementById('unitCount').value='1';
   document.getElementById('platform').value='';document.getElementById('feePct').value='0';
@@ -601,6 +604,14 @@ function nextBtn(r){
 
 /* --- Görünümler ----------------------------------------------------------- */
 
+/* Teslim durumu çipi. Tarih girilmemişse hiç çizilmiyor: "süresiz" ayrı bir
+   bilgi değil, sadece bilinmiyor. */
+function dueChip(r){
+  const t = teslim(r);
+  if(!t) return '';
+  return `<span class="chip ${t.gec ? 'gec' : 'due'}">${t.gec ? '⏰' : '🗓'} ${esc(t.metin)}</span>`;
+}
+
 /* Kart üstündeki ilerleme çubuğu. Takip verisi varsa gerçek elo ilerlemesi,
    yoksa işin akıştaki adımı — etiket hangisi olduğunu söylüyor (ui-common). */
 function ilerlemeHTML(r){
@@ -635,7 +646,7 @@ function cardHTML(r){
              <div class="rec-f"><span class="rec-f-l">booster</span><span class="rec-f-v">${fmt(r.payout,'TRY')}</span></div>`)
       : `<div class="rec-f"><span class="rec-f-l">kazancın</span><span class="rec-f-v">${fmt(r.payout,'TRY')}</span></div>`;
     const shot=r.image?`<div class="rec-shot"><img src="${r.image}" onclick="openLightbox('${r.id}')"></div>`:'';
-    return `<div class="rec ${r.archived?'arch':''}">
+    return `<div class="rec ${r.archived?'arch':''}${isGec(r)?' gec':''}">
       <div class="rec-top"><div>
         <div class="rec-route open" onclick="openDetail('${r.id}')" title="Detayı aç">
           <span class="chip game">${esc(gameOf(r.game).short)}</span> ${routeHTML(r)}</div>
@@ -647,6 +658,7 @@ function cardHTML(r){
           ${isAdmin()&&r.boosterId?`<span class="chip booster">👤 ${esc(nameOf(r.boosterId))}</span>`:''}
           ${isAdmin()&&!r.boosterId&&!isDis(r)?`<span class="chip" style="color:var(--amber)">⚠ atanmadı</span>`:''}
           <span class="chip">🗓 ${r.tarih}</span>
+          ${dueChip(r)}
           ${r.orderType==='rank'&&r.startRR?`<span class="chip">RR ${r.startRR}</span>`:''}
           ${r.orderType==='rank'&&r.region!=='TR'?`<span class="chip">🌍 ${esc(r.region)}</span>`:''}
           ${r.riotId?`<span class="chip" style="border-color:rgba(90,157,237,.35);color:var(--blue)">🎮 ${esc(r.riotId)}</span>`:''}
@@ -698,11 +710,12 @@ function renderTable(list){
           ? `<td class="r c-m">${fmt(net,'TRY')}</td><td class="r c-m kar">${fmt(kar,'TRY')}</td>`
           : `<td class="r c-m dim">—</td><td class="r c-m dim">—</td>`)
       : `<td class="r c-m">${fmt(r.payout,'TRY')}</td>`;
-    return `<tr data-selrow="${esc(r.id)}" class="${ordersView.sel.has(r.id)?'picked':''}${r.archived?' arch':''}">
+    return `<tr data-selrow="${esc(r.id)}" class="${ordersView.sel.has(r.id)?'picked':''}${r.archived?' arch':''}${isGec(r)?' gec':''}">
       <td class="c-sel">${selBox(r)}</td>
       <td class="o-job" onclick="openDetail('${r.id}')">
         <div class="o-route">${routeHTML(r)}</div>
-        <div class="o-sub">${esc(r.tarih||'')}${r.riotId?' · '+esc(r.riotId):''}</div></td>
+        <div class="o-sub">${esc(r.tarih||'')}${r.riotId?' · '+esc(r.riotId):''}${
+          (teslim(r)||{}).gec?` · <span class="gec">${esc(teslim(r).metin)}</span>`:''}</div></td>
       <td class="c-game"><span class="chip game">${esc(gameOf(r.game).short)}</span></td>
       <td class="c-st"><span class="status ${esc(r.durum)}">${esc(STATUS_LABEL[r.durum]||r.durum)}</span></td>
       ${admin?`<td class="c-b">${isDis(r)?`<span class="chip dis">🏷 ${esc(r.vendor)}</span>`
@@ -736,14 +749,17 @@ function renderBoard(list){
         ondrop="boardDrop(event,'${esc(k)}')">
       <div class="bcol-h"><span class="status ${esc(k)}">${esc(STATUS_LABEL[k]||k)}</span><span class="bcol-n">${kolon.length}</span></div>
       <div class="bcol-body">${kolon.map(r => `
-        <div class="bcard" data-selrow="${esc(r.id)}" draggable="true"
+        <div class="bcard${isGec(r)?' gec':''}" data-selrow="${esc(r.id)}" draggable="true"
              ondragstart="boardDragStart(event,'${esc(r.id)}')" ondragend="boardDragEnd(event)"
+             ondragover="shotDragOver(event)" ondragleave="shotDragLeave(event)"
+             ondrop="shotDrop(event,'${esc(r.id)}')"
              onclick="openDetail('${esc(r.id)}')">
           <div class="bcard-top">
             <span class="bcard-grip" title="sürükle">⠿</span>
             <div class="bcard-head">
               <div class="o-route"><span class="chip game">${esc(gameOf(r.game).short)}</span> ${routeHTML(r)}</div>
-              <div class="bcard-sub">${esc(r.tarih || '')}${r.riotId ? ' · ' + esc(r.riotId) : ''}</div>
+              <div class="bcard-sub">${esc(r.tarih || '')}${r.riotId ? ' · ' + esc(r.riotId) : ''}${
+                (teslim(r)||{}).gec ? ` · <span class="gec">${esc(teslim(r).metin)}</span>` : ''}</div>
             </div>
           </div>
           ${ilerlemeHTML(r)}
@@ -767,6 +783,43 @@ function renderBoard(list){
 
    Sürüklenen kart seçiliyse tüm seçim taşınır — kullanıcı 5 kart seçip birini
    sürüklediğinde beşinin de taşınmasını bekler. */
+/* Bitiş görüntüsünü kartın üstüne bırakmak: dosyayı kaydediyor ve işi
+   "Tamam"a çekiyor. Boostçunun teslim akışı zaten "ekran görüntüsü at" —
+   panelde de aynı hareket olsun.
+
+   Kart sürüklemesiyle karışmıyor: sürüklenen şey DOSYA mı diye bakıyoruz
+   (dataTransfer.types 'Files' içeriyorsa). Kart sürüklerken tetiklenirse
+   yanlış sütuna düşerdi. */
+const dosyaSurukleniyor = e => [...(e.dataTransfer?.types || [])].includes('Files');
+
+function shotDragOver(e){
+  if(!dosyaSurukleniyor(e)) return;          // kart sürüklemesi → sütun ilgilensin
+  e.preventDefault(); e.stopPropagation();
+  e.currentTarget.classList.add('shot-over');
+}
+function shotDragLeave(e){ e.currentTarget.classList.remove('shot-over'); }
+
+async function shotDrop(e, id){
+  if(!dosyaSurukleniyor(e)) return;
+  e.preventDefault(); e.stopPropagation();
+  e.currentTarget.classList.remove('shot-over');
+  const f = e.dataTransfer.files[0];
+  if(!f || !/^image\//.test(f.type)){ toast('Yalnızca görsel bırakabilirsin.', 'err'); return; }
+  const r = records.find(x => x.id === id); if(!r) return;
+  try {
+    const d = await compressImage(f);
+    // Görsel ve durum TEK yazımda: iki ayrı istek olsaydı ikincisi
+    // düşünce görselli ama hâlâ 'devam' bir kayıt kalırdı.
+    const alan = { image:d };
+    if(r.durum !== 'tamam' && NEXT_STATUS[r.durum]) alan.durum = 'tamam';
+    const { error } = await sb.from(TABLES.orders).update(alan).eq('id', id);
+    if(error) throw error;
+    await loadAll();
+    toast(alan.durum ? `${routeText(r)} · görsel eklendi, Tamam'a alındı`
+                     : `${routeText(r)} · görsel eklendi`);
+  } catch(err){ toast('Görsel eklenemedi: ' + err.message, 'err'); }
+}
+
 let boardDrag = null;
 
 function boardDragStart(e, id){

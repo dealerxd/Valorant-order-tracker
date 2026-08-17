@@ -120,6 +120,49 @@ function trackerBlock(r){
   </div>`;
 }
 
+/* Zaman çizelgesi.
+
+   Tasarımda her siparişin altında bir olay akışı vardı ("Kaan'a atandı",
+   "durum değişti", "ödeme yapıldı"). Veritabanında BÖYLE BİR TABLO YOK —
+   `resells` yalnızca son hâli tutuyor, kim ne zaman neyi değiştirdi kaydı
+   tutulmuyor. Uydurma zaman damgası basmak yerine gerçekten damgası olan iki
+   olayı çiziyoruz: siparişin açılışı ve botun çektiği her maç. Kutunun altında
+   neyin eksik olduğu da yazıyor — eksiği gizlemek, olmayan bir denetim kaydına
+   güvenmene yol açar. */
+function timelineBlock(r){
+  const olaylar = [];
+  if(r.created) olaylar.push({ t:tsMs(r.created), tur:'yeni',
+    metin:'Sipariş açıldı', kim:'panel' });
+
+  const m = drawerMatches;
+  if(m.rows) m.rows.filter(x => x.played_at).forEach(x => {
+    const rr = Number(x.rr_change) || 0;
+    olaylar.push({ t:tsMs(x.played_at), tur: rr > 0 ? 'tamam' : rr < 0 ? 'kayip' : 'devam',
+      metin: `${rr > 0 ? '+' : ''}${rr} RR${x.map_name ? ' · ' + x.map_name : ''}`,
+      kim:'takip botu' });
+  });
+
+  const ts = teslim(r);
+  if(ts) olaylar.push({ t:tsMs(r.dueAt), tur: ts.gec ? 'kayip' : 'devam',
+    metin:`Teslim tarihi · ${ts.metin}`, kim:'söz verilen', ileri:!ts.gec });
+
+  olaylar.sort((a,b) => (b.t || 0) - (a.t || 0));
+
+  const eksik = m.rows === null && isTrackedGame(r.game) && trackerOf(r.id)
+    ? 'maçlar yükleniyor…'
+    : 'Durum değişikliklerinin ve ödemelerin zaman kaydı tutulmuyor; bu liste sipariş açılışından ve botun çektiği maçlardan türetiliyor.';
+
+  return `<div class="d-box"><div class="d-box-h">Zaman çizelgesi</div>
+    ${olaylar.length ? `<div class="tl">${olaylar.map(o => `
+      <div class="tl-row${o.ileri ? ' ileri' : ''}">
+        <span class="tl-dot ${esc(o.tur)}"></span>
+        <span class="tl-txt">${esc(o.metin)}
+          <span class="tl-who">${esc(o.kim)}</span></span>
+        <span class="tl-t">${esc(o.t ? agoText(new Date(o.t).toISOString()) : '—')}</span>
+      </div>`).join('')}</div>` : '<div class="d-empty">Kayıt yok.</div>'}
+    <div class="ov-note">${esc(eksik)}</div></div>`;
+}
+
 function renderDetail(){
   if(!drawerId) return;
   const r = records.find(x=>x.id===drawerId);
@@ -156,6 +199,7 @@ function renderDetail(){
       ${isAdmin()&&r.boosterId?`<span class="chip booster">👤 ${esc(nameOf(r.boosterId))}</span>`:''}
       ${isAdmin()&&f.platform?`<span class="chip" style="border-color:rgba(212,175,55,.3);color:var(--gold)">🛒 ${esc(f.platform)}</span>`:''}
       ${r.archived?`<span class="chip" style="color:var(--amber)">🗄 arşiv</span>`:''}
+      ${dueChip(r)}
       ${(r.extras||[]).map(k=>`<span class="chip">✚ ${esc(extraLabel(k))}</span>`).join('')}
       ${r.extraWin?`<span class="chip">➕ Extra Win</span>`:''}
     </div>
@@ -164,6 +208,7 @@ function renderDetail(){
     ${money}
     ${r.jobDesc?`<div class="d-box"><div class="d-box-h">İş açıklaması</div><div class="d-note">${esc(r.jobDesc)}</div></div>`:''}
     ${r.not?`<div class="d-box"><div class="d-box-h">Not</div><div class="d-note">${esc(r.not)}</div></div>`:''}
+    ${timelineBlock(r)}
 
     <div class="rec-actions" style="margin-top:18px">
       ${NEXT_STATUS[r.durum]?`<button class="icon-btn go" onclick="setStatus('${r.id}','${NEXT_STATUS[r.durum]}')">→ ${STATUS_LABEL[NEXT_STATUS[r.durum]]}</button>`:''}

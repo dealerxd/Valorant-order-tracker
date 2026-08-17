@@ -37,34 +37,94 @@ function renderInvites(){
     open.map(i=>`<span class="chip" style="margin:0 6px 6px 0;font-family:ui-monospace,monospace;color:var(--gold)">${i.code}
       <span onclick="delInvite('${i.code}')" style="cursor:pointer;color:var(--muted)">✕</span></span>`).join('');
 }
+/* Ekip listesi. Tasarımdaki doluluk çubuğu buradaki asıl bilgi: kimin
+   müsait olduğunu bilmeden atama yapmak, dolu boostçuya beşinci işi vermek
+   demek. Kapasite profiles.capacity'den (shared/migrations/003); girilmemişse
+   "sınırsız" sayılıyor ve çubuk çizilmiyor — uydurma bir tavan koymuyoruz.
+
+   Sayılar sipariş listesinden türetiliyor, ayrı bir yerde tutulmuyor: iki
+   kaynak olsaydı biri güncellenip diğeri eski kalırdı. */
+function boosterOzeti(p){
+  const hepsi  = records.filter(r => r.boosterId === p.id && !r.archived);
+  const acik   = hepsi.filter(isOpen);
+  const gecen  = acik.filter(isGec).length;
+  const kazanc = hepsi.filter(r => r.paid).reduce((s,r) => s + r.payout, 0);
+  const borc   = hepsi.filter(r => !isOpen(r) && !r.paid).reduce((s,r) => s + r.payout, 0);
+  const kap    = Number(p.capacity) || 0;
+  const oyunlar = [...new Set(hepsi.map(r => r.game))];
+  return {
+    hepsi, acik:acik.length, gecen, kazanc, borc, kap, oyunlar,
+    bitti: hepsi.length - acik.length,
+    dolu: kap > 0 && acik.length >= kap,
+    hal: !p.active ? 'pasif' : acik.length ? 'meşgul' : 'müsait',
+  };
+}
+
 function renderBoosters(){
-  const el=document.getElementById('boosterList');
-  el.innerHTML=`<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Kayıtlı kişiler</div>`+
-    people.map(p=>{
-      const mine=records.filter(r=>r.boosterId===p.id&&!r.archived);
-      const kazanc=mine.reduce((s,r)=>s+r.payout,0);
-      const borc=mine.filter(r=>!r.paid).reduce((s,r)=>s+r.payout,0);
-      const kisisel=[
-        p.full_name?`<span class="chip">👤 ${esc(p.full_name)}</span>`:'',
-        p.phone?`<span class="chip">📞 ${esc(p.phone)} <b style="cursor:pointer" data-v="${esc(p.phone)}" onclick="copyText(this)">📋</b></span>`:'',
-        p.discord?`<span class="chip">💬 ${esc(p.discord)}</span>`:'',
-        p.iban?`<span class="chip">🏦 ${esc(p.iban)} <b style="cursor:pointer" data-v="${esc(p.iban)}" onclick="copyText(this)">📋</b></span>`:'',
-        p.crypto_addr?`<span class="chip">🪙 ${esc(p.crypto_addr)} <b style="cursor:pointer" data-v="${esc(p.crypto_addr)}" onclick="copyText(this)">📋</b></span>`:''
+  const el = document.getElementById('boosterList');
+  el.innerHTML = `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Kayıtlı kişiler</div>`
+    + people.map(p => {
+      const o = boosterOzeti(p);
+      const kisisel = [
+        p.full_name  ? `<span class="chip">👤 ${esc(p.full_name)}</span>` : '',
+        p.phone      ? `<span class="chip">📞 ${esc(p.phone)} <b style="cursor:pointer" data-v="${esc(p.phone)}" onclick="copyText(this)">📋</b></span>` : '',
+        p.discord    ? `<span class="chip">💬 ${esc(p.discord)}</span>` : '',
+        p.iban       ? `<span class="chip">🏦 ${esc(p.iban)} <b style="cursor:pointer" data-v="${esc(p.iban)}" onclick="copyText(this)">📋</b></span>` : '',
+        p.crypto_addr? `<span class="chip">🪙 ${esc(p.crypto_addr)} <b style="cursor:pointer" data-v="${esc(p.crypto_addr)}" onclick="copyText(this)">📋</b></span>` : '',
       ].filter(Boolean).join('');
-      return `<div class="rec"><div class="rec-top"><div>
-        <div class="rec-route">${esc(p.display_name)} <span class="role-chip ${p.role==='admin'?'':'booster'}" style="margin-left:8px">${p.role==='admin'?'Admin':'Booster'}</span></div>
-        <div class="rec-meta" style="margin-top:7px">
-          <span class="chip ${p.active?'paid':'unpaid'}">${p.active?'✓ aktif':'● pasif'}</span>
-          <span class="chip">${mine.length} iş</span><span class="chip">kazanç ${kazanc.toLocaleString('tr-TR')} ₺</span>
-          ${borc>0?`<span class="chip unpaid">borç ${borc.toLocaleString('tr-TR')} ₺</span>`:''}
-        </div>
-        ${kisisel?`<div class="rec-meta" style="margin-top:7px">${kisisel}</div>`:`<div class="rec-meta" style="margin-top:7px"><span class="chip" style="color:var(--muted)">kişisel bilgi girilmemiş</span></div>`}
+
+      const kutu = (etiket, deger, sinif) =>
+        `<div class="bs-cell"><span class="bs-l">${esc(etiket)}</span>
+           <span class="bs-v ${sinif||''}">${esc(deger)}</span></div>`;
+
+      return `<div class="rec">
+        <div class="rec-top"><div>
+          <div class="rec-route">${esc(p.display_name)}
+            <span class="role-chip ${p.role==='admin'?'':'booster'}" style="margin-left:8px">${p.role==='admin'?'Admin':'Booster'}</span></div>
+          <div class="rec-meta" style="margin-top:7px">
+            <span class="chip bs-${o.hal==='pasif'?'off':o.hal==='meşgul'?'busy':'free'}">${o.hal}</span>
+            ${o.oyunlar.map(g => `<span class="chip game">${esc(gameOf(g).short)}</span>`).join('')}
+          </div>
         </div></div>
+
+        ${o.kap ? `<div class="bs-load">
+          <div class="bs-load-top"><span>doluluk</span><b>${o.acik} / ${o.kap} iş</b></div>
+          <div class="bs-load-bar"><span class="${o.dolu?'full':''}"
+            style="width:${Math.min(100, Math.round(o.acik/o.kap*100))}%"></span></div>
+        </div>` : `<div class="bs-load"><div class="bs-load-top">
+          <span>doluluk</span><b class="dim">kapasite girilmemiş · ${o.acik} açık iş</b></div></div>`}
+
+        <div class="bs-grid">
+          ${kutu('tamamladığı', String(o.bitti))}
+          ${kutu('geciken', o.gecen ? `${o.gecen} iş` : '—', o.gecen ? 'red' : '')}
+          ${kutu('kazandığı', fmt(o.kazanc,'TRY'))}
+          ${kutu('borç', fmt(o.borc,'TRY'), o.borc ? 'red' : 'green')}
+        </div>
+
+        <div class="rec-meta" style="margin-top:11px">${kisisel
+          || '<span class="chip" style="color:var(--muted)">kişisel bilgi girilmemiş</span>'}</div>
+
         <div class="rec-actions">
-          <button class="icon-btn ${p.active?'del':'go'}" onclick="toggleActive('${p.id}',${!p.active})">${p.active?'Pasifleştir':'Aktifleştir'}</button>
+          <button class="icon-btn" onclick="setKapasite('${esc(p.id)}')">⚖ Kapasite</button>
+          <button class="icon-btn ${p.active?'del':'go'}" onclick="toggleActive('${esc(p.id)}',${!p.active})">${p.active?'Pasifleştir':'Aktifleştir'}</button>
         </div></div>`;
     }).join('');
 }
+
+/* Kapasite: aynı anda kaç açık iş alabilir. Boş bırakmak "sınırsız" demek. */
+async function setKapasite(id){
+  const p = people.find(x => x.id === id); if(!p) return;
+  const cvp = prompt(`${p.display_name} aynı anda kaç iş alabilir?\n(boş bırak = sınırsız)`,
+                     p.capacity || '');
+  if(cvp === null) return;
+  const v = cvp.trim() === '' ? null : Number(cvp);
+  if(v !== null && (!isFinite(v) || v < 1)){ alert('Pozitif bir sayı gir ya da boş bırak.'); return; }
+  const { error } = await sb.from('profiles').update({ capacity:v }).eq('id', id);
+  if(error){ alert('Kaydedilemedi: ' + error.message); return; }
+  await loadAll();
+  toast(v === null ? `${p.display_name} · kapasite sınırsız` : `${p.display_name} · kapasite ${v} iş`);
+}
+
 function randCode(){ const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++)s+=a[Math.floor(Math.random()*a.length)]; return s; }
 async function genInvite(){
   const code=randCode();

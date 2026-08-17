@@ -322,6 +322,8 @@
         <div class="field"><label>Durum</label><select id="durum" data-status onchange="toggleImageField()"></select></div>
         <div class="field"><label>Tarih</label><input type="date" id="tarih"></div>
       </div>
+      <div class="field admin-only"><label>Teslim tarihi <span style="opacity:.55;font-weight:400">— boş bırakılabilir, süresiz sayılır</span></label>
+        <input type="date" id="dueAt"></div>
       <div class="field hidden" id="imageField"><label>Bitiş Ekran Görüntüsü</label>
         <div class="img-drop" onclick="document.getElementById('imgInput').click()">
           <span id="imgDropText">📷 Görsel seç / Ctrl+V</span><img id="imgPreview" class="hidden" alt=""></div>

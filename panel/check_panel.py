@@ -889,6 +889,159 @@ with sync_playwright() as p:
           page.eval_on_selector_all("#srcTabs .st-tab", "e => e.length") == 0)
     page.evaluate("me={id:'admin1',role:'admin',display_name:'Rex'}; buildTabs(); applyRoleUI(); render();")
 
+    # --- Teslim tarihi ve gecikme -----------------------------------------
+    # Tarih GÜN bazında: bugüne söz verilen iş bugün boyunca geç değil.
+    page.evaluate("""
+      const g = n => new Date(Date.now() + n*86400000).toISOString().slice(0,10);
+      records[0].dueAt = g(-3); records[0].durum = 'devam';
+      records[1].dueAt = g(0);
+      records[2].dueAt = g(2);
+      window.__g = g;
+    """)
+    check("gecmis tarih geciken sayiliyor", page.evaluate("teslim(records[0]).gec") is True)
+    check("gecikme gun sayisi", page.evaluate("teslim(records[0]).gun") == 3,
+          page.evaluate("JSON.stringify(teslim(records[0]))"))
+    check("bugun teslim henuz geç degil",
+          page.evaluate("teslim(records[1]).gec") is False
+          and page.evaluate("teslim(records[1]).metin") == "bugün teslim")
+    check("ileri tarih kalan gunu veriyor",
+          page.evaluate("teslim(records[2]).metin") == "2 gün kaldı")
+    check("tarihsiz is suresiz",
+          page.evaluate("(r => { const d=r.dueAt; r.dueAt=''; const v=teslim(r); r.dueAt=d; return v; })(records[0]) === null"))
+    # Kapanmış işin gecikmesi yok — teslim edildiyse konu kapanmıştır.
+    check("kapanan isin gecikmesi yok",
+          page.evaluate("(r => { const d=r.durum; r.durum='tamam'; const v=teslim(r); r.durum=d; return v; })(records[0]) === null"))
+    check("geciken is uyari uretiyor",
+          page.evaluate("alertModel().some(a => a.tur === 'gecikti' && a.id === 'A')"))
+    check("geciken uyarisi en agir",
+          page.evaluate("alertModel()[0].tur") == "gecikti",
+          page.evaluate("alertModel()[0].tur"))
+    page.evaluate("render()"); page.wait_for_timeout(120)
+    check("geciken kart isaretlendi",
+          page.eval_on_selector_all(".rec.gec", "e => e.length") == 1,
+          str(page.eval_on_selector_all(".rec.gec", "e => e.length")))
+    check("kartta teslim cipi var",
+          "gün geç" in page.eval_on_selector("#recordList", "e => e.textContent"))
+    # Dışarıya verilmiş iş de gecikebilir: satıcı gecikirse müşteri seni arar.
+    check("dis kaynak isi de gecikebiliyor",
+          page.evaluate("(r => { r.dueAt = window.__g(-5); return isDis(r) && isGec(r); })(records[1])"))
+    page.evaluate("records.forEach(r => r.dueAt=''); render();")
+
+    # --- Ödemeler: seçim ve toplam ----------------------------------------
+    page.evaluate("""
+      people = [{id:'b1',display_name:'Ali',role:'booster',active:true,
+                 iban:'TR33 0006 1005 1978 6457 8413 26',capacity:2}];
+      records[0].durum='tamam'; records[0].boosterId='b1'; records[0].paid=false;
+      records[0].payout=400; records[0].vendor='';
+      odemeSecim.clear(); switchTab('odeme');
+    """)
+    page.wait_for_timeout(150)
+    check("odeme satirinda IBAN gorunuyor",
+          "TR33" in page.inner_text("#odemeBody"))
+    check("seçim yokken cubuk yok",
+          page.eval_on_selector_all(".pay-bar", "e => e.length") == 0)
+    page.evaluate("odemeSec('b:b1', true)"); page.wait_for_timeout(120)
+    check("secim cubugu cikti", page.eval_on_selector_all(".pay-bar", "e => e.length") == 1)
+    check("secim toplami dogru",
+          page.eval_on_selector(".pay-bar-t", "e => e.textContent.trim()")
+          == page.evaluate("fmt(400,'TRY')"),
+          page.eval_on_selector(".pay-bar-t", "e => e.textContent.trim()"))
+    page.evaluate("odemeSec('v:Mert', true)"); page.wait_for_timeout(120)
+    check("satici da secime giriyor", page.evaluate("odemeSecim.size") == 2)
+    # Ödenmiş bir satır listeden düşünce seçim toplamı şişmemeli.
+    page.evaluate("records[0].paid = true; renderPayments();")
+    page.wait_for_timeout(120)
+    check("kaybolan satirin secimi kirpildi",
+          page.evaluate("odemeSecim.has('b:b1')") is False,
+          str(page.evaluate("[...odemeSecim]")))
+    page.evaluate("odemeSecTemizle(); records[0].paid = false;")
+
+    # --- Boosterlar: doluluk ----------------------------------------------
+    page.evaluate("""
+      records[0].durum='devam'; records[0].boosterId='b1';
+      records[1].boosterId='b1'; records[1].durum='atandi'; records[1].vendor='';
+      switchTab('boosterlar');
+    """)
+    page.wait_for_timeout(150)
+    check("doluluk cubugu cizildi",
+          page.eval_on_selector_all(".bs-load-bar", "e => e.length") == 1)
+    check("doluluk orani dolu",
+          page.eval_on_selector(".bs-load-bar span", "e => e.className") == "full",
+          page.eval_on_selector(".bs-load-bar span", "e => e.className"))
+    check("doluluk etiketi 2/2",
+          "2 / 2" in page.eval_on_selector("#boosterList", "e => e.textContent"))
+    check("mesgul rozeti", "meşgul" in page.eval_on_selector("#boosterList", "e => e.textContent"))
+    # Kapasite girilmemişse uydurma tavan koymuyoruz.
+    page.evaluate("people[0].capacity = null; renderBoosters();")
+    check("kapasitesiz boosterda cubuk yok",
+          page.eval_on_selector_all(".bs-load-bar", "e => e.length") == 0)
+    check("kapasitesiz boosterda aciklama var",
+          "kapasite girilmemiş" in page.eval_on_selector("#boosterList", "e => e.textContent"))
+    page.evaluate("people[0].capacity = 2;")
+
+    # --- Drawer zaman çizelgesi -------------------------------------------
+    page.evaluate("""
+      tracker = { A:{order_id:'A',puuid:'p',start_elo:900,current_elo:1000,target_elo:1100,
+                     paused:false,last_poll_at:new Date().toISOString(),
+                     last_match_at:new Date().toISOString(),loss_streak:0} };
+      openDetail('A');
+    """)
+    # openDetail async mac yuklemesi baslatiyor; saplama bos donup drawerMatches'i
+    # eziyor. Once o tamamlansin, maclari SONRA koyalim.
+    page.wait_for_timeout(200)
+    page.evaluate("""
+      drawerMatches = { rows:[
+        {rr_change: 21, map_name:'Ascent', played_at:new Date(Date.now()-3600000).toISOString()},
+        {rr_change:-14, map_name:'Bind',   played_at:new Date(Date.now()-7200000).toISOString()}
+      ], error:null };
+      renderDetail();
+    """)
+    page.wait_for_timeout(150)
+    check("zaman cizelgesi cizildi",
+          page.eval_on_selector_all(".tl-row", "e => e.length") == 3,
+          str(page.eval_on_selector_all(".tl-row", "e => e.map(x=>x.textContent.trim())")))
+    check("cizelge en yeniden eskiye",
+          "+21" in page.eval_on_selector(".tl-row", "e => e.textContent"))
+    check("kazanilan mac yesil, kaybedilen kirmizi",
+          page.eval_on_selector_all(".tl-dot.tamam", "e => e.length") == 1
+          and page.eval_on_selector_all(".tl-dot.kayip", "e => e.length") == 1)
+    # Olmayan denetim kaydını varmış gibi göstermiyoruz.
+    check("cizelge eksigini soyluyor",
+          "zaman kaydı tutulmuyor" in page.inner_text("#drawerBody"))
+    page.evaluate("closeDetail(); drawerMatches = { rows:null, error:null }; tracker = {};")
+
+    # --- Panoda görsel bırakma --------------------------------------------
+    # Kart sürüklemesi ile dosya bırakma karışmamalı: sürüklenen kartken
+    # tetiklenirse iş yanlışlıkla Tamam'a geçerdi.
+    check("kart suruklemesi gorsel hedefi acmiyor",
+          page.evaluate("""(() => {
+            let onlendi = false;
+            const e = { dataTransfer:{types:['text/plain']},
+                        preventDefault:()=>{onlendi=true}, stopPropagation(){},
+                        currentTarget:{classList:{add(){},remove(){}}} };
+            shotDragOver(e); return !onlendi;
+          })()"""))
+    check("dosya suruklemesi gorsel hedefini aciyor",
+          page.evaluate("""(() => {
+            let onlendi = false;
+            const e = { dataTransfer:{types:['Files']},
+                        preventDefault:()=>{onlendi=true}, stopPropagation(){},
+                        currentTarget:{classList:{add(){},remove(){}}} };
+            shotDragOver(e); return onlendi;
+          })()"""))
+    # Görsel olmayan dosya reddedilmeli.
+    page.evaluate("""
+      window.__toast = '';
+      window.__realToast = toast; toast = (m,t) => { window.__toast = m; };
+      shotDrop({ dataTransfer:{types:['Files'], files:[{type:'application/pdf'}]},
+                 preventDefault(){}, stopPropagation(){},
+                 currentTarget:{classList:{remove(){}}} }, 'A');
+    """)
+    page.wait_for_timeout(120)
+    check("gorsel olmayan dosya reddediliyor",
+          "görsel" in page.evaluate("window.__toast"), page.evaluate("window.__toast"))
+    page.evaluate("toast = window.__realToast;")
+
     browser.close()
 
 print(f"\n{'BASARISIZ: ' + ', '.join(failures) if failures else 'panel kontrolleri gecti.'}")
