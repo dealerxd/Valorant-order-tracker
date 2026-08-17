@@ -132,6 +132,63 @@ export function GameBreakdownCard({ stats, showFinance }: { stats: GameStat[]; s
   );
 }
 
+export interface PartnerStat {
+  /** 'own' or the partner name. */
+  key: string;
+  label: string;
+  sub: string;
+  jobs: number;
+  net: number;
+  /** Remaining profit before the split. */
+  profit: number;
+  /** reXs' half. */
+  own: number;
+  /** The partner's half; 0 for the wholly-owned bucket. */
+  partner: number;
+  color: string;
+  href: string;
+}
+
+/** The two-way split: GameBoost is wholly ours, Eldorado is shared with TZX. */
+export function PartnerCard({ stats }: { stats: PartnerStat[] }) {
+  return (
+    <div style={cardStyle}>
+      <div style={panelHeading}><span style={headingBar(C.green)} />Ownership</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {stats.map((s) => (
+          <Link key={s.key} href={s.href} className="hover-border" style={{
+            display: 'block', background: C.surface1, border: `1px solid ${C.border}`,
+            borderRadius: 11, padding: '13px 14px', color: 'inherit',
+          }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={dot(s.color, 8, true)} />
+              <span style={{ fontSize: 13, color: C.text }}>{s.label}</span>
+              <span style={{ fontSize: 11.5, color: C.muted, marginLeft: 'auto' }}>{s.jobs} jobs</span>
+            </span>
+
+            <span style={{ display: 'block', fontSize: 11, color: C.muted, marginTop: 4 }}>{s.sub}</span>
+
+            <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 11.5, color: C.muted }}>
+              <span>remaining profit</span>
+              <b style={{ fontFamily: FONT_DISPLAY, fontSize: 14, color: C.text2 }}>{TL(s.profit)}</b>
+            </span>
+            <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 11.5, color: C.muted }}>
+              <span>yours</span>
+              <b style={{ fontFamily: FONT_DISPLAY, fontSize: 15, color: s.own < 0 ? C.red : C.green }}>{TL(s.own)}</b>
+            </span>
+            {s.partner !== 0 && (
+              <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 11.5, color: C.muted }}>
+                <span>TZX</span>
+                <b style={{ fontFamily: FONT_DISPLAY, fontSize: 15, color: C.blue }}>{TL(s.partner)}</b>
+              </span>
+            )}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export interface FeedEntry {
   text: string;
   time: string;

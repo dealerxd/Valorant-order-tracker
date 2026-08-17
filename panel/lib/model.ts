@@ -107,7 +107,44 @@ export const isExternal = (o: Pick<Order, 'fulfil'>) => o.fulfil === 'external';
 export const costTL = (o: Pick<Order, 'fulfil' | 'vcost' | 'vcur' | 'rate' | 'payout'>) =>
   isExternal(o) ? Math.round((Number(o.vcost) || 0) * (o.vcur === '₺' ? 1 : (Number(o.rate) || 41))) : o.payout;
 
+/** "Kalan kâr" — what is left after the marketplace commission and whoever
+    fulfilled the job. This is the figure a partnership splits. */
 export const profit = (o: Order) => netRevenue(o) - costTL(o);
+
+/* ---- partnerships -------------------------------------------------------
+   Orders are split two ways by where they came from:
+
+     GameBoost  -> 100% reXs
+     Eldorado   -> 50/50 reXs / TZX, on the remaining profit
+
+   The partner is derived from the marketplace, not stored per order, so
+   there is nothing to keep in sync. Adding a partner later means one entry
+   here. A loss splits the same way a gain does. */
+
+export interface PartnerRule {
+  name: string;
+  /** Percent of `profit` the partner takes. */
+  sharePct: number;
+}
+
+export const PARTNERS: Record<string, PartnerRule> = {
+  Eldorado: { name: 'TZX', sharePct: 50 },
+};
+
+export const partnerOf = (o: Pick<Order, 'platform'>): PartnerRule | null =>
+  PARTNERS[o.platform] ?? null;
+
+/** The partner's cut of this order, 0 when it is wholly ours. */
+export function partnerShare(o: Order): number {
+  const p = partnerOf(o);
+  return p ? Math.round(profit(o) * p.sharePct / 100) : 0;
+}
+
+/** What actually lands with reXs after the partner takes their cut. */
+export const ownProfit = (o: Order) => profit(o) - partnerShare(o);
+
+/** Bucket label for grouping and filtering. */
+export const partnerBucket = (o: Pick<Order, 'platform'>) => partnerOf(o)?.name ?? 'own';
 
 /** 0-100. Tracked rank jobs use the ladder position; everything else falls
     back to the status, because nobody reports partial progress there. */
@@ -154,6 +191,8 @@ export interface OrderFilters {
   game?: string;
   src?: string;
   q?: string;
+  /** Partner bucket: 'own' (GameBoost) or a partner name such as 'TZX'. */
+  partner?: string;
   /** Extra lenses the Overview alert rows link into. */
   late?: boolean;
   unpaid?: boolean;
@@ -167,6 +206,7 @@ export function filterOrders(orders: Order[], f: OrderFilters): Order[] {
     if (f.game && f.game !== 'all' && o.game !== f.game) return false;
     if (f.src === 'internal' && isExternal(o)) return false;
     if (f.src === 'external' && !isExternal(o)) return false;
+    if (f.partner && partnerBucket(o) !== f.partner) return false;
     if (f.late && !o.late) return false;
     if (f.unpaid && (isExternal(o) ? o.vpaid : o.paid)) return false;
     if (f.nofinance && o.cost !== 0) return false;

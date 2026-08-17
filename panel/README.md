@@ -145,6 +145,37 @@ rather than pretending to work:
 The drawer's **Edit** button is also inert — the handoff lists it but does not
 specify the edit form.
 
+## Ownership split (reXs / TZX)
+
+Orders divide two ways, derived from the marketplace — there is no extra
+column and nothing to keep in sync:
+
+| Marketplace | Remaining profit |
+|---|---|
+| GameBoost | 100% reXs |
+| Eldorado | 50% reXs / 50% TZX |
+
+"Remaining profit" is `netRevenue − costTL`: the marketplace commission and
+whoever fulfilled the job (own booster payout, or the outsourced seller's
+amount converted to TL) are both already out. A loss splits the same way a
+gain does.
+
+It lives in `lib/model.ts` as `PARTNERS` / `partnerOf()` / `partnerShare()` /
+`ownProfit()`. Adding a partner, or changing a percentage, is one entry in
+`PARTNERS`. Where it surfaces:
+
+- **Overview** — `Net Profit` is now *your* share, with a separate `TZX Share`
+  KPI, plus an **Ownership** panel breaking the two buckets out.
+- **Orders** — a partner filter (All / GameBoost 100% you / TZX 50-50), and
+  the Profit column shows your share with TZX's cut on the line beneath.
+- **Drawer** — the Finance card shows remaining profit → TZX cut → yours.
+- **Payments** — the footer carries TZX's accrued share.
+
+**Not settled anywhere yet.** The TZX figure is reporting only; there is no
+"mark TZX paid" flag, so it accrues forever. Making it settle like booster
+payouts do needs one boolean on `resells` (mirroring `vendor_paid`) plus a
+row in the Payments table — say the word and it is a small change.
+
 ## Reading the live schema, not the handoff
 
 Four things were written against the design doc's assumptions and then
