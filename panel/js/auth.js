@@ -42,8 +42,14 @@ async function afterLogin(){
   me=data;
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  document.getElementById('whoAmI').innerHTML=`${esc(me.display_name)} <span class="role-chip ${isAdmin()?'':'booster'}">${isAdmin()?'Admin':'Booster'}</span>`;
+  renderMeCard();
   buildTabs(); applyRoleUI();
+  // Form varsayilanlari rol belli olduktan SONRA yeniden kurulmali: app.js
+  // sonundaki resetForm() giris yapilmadan calisiyor ve o an me=null oldugu
+  // icin durum 'yeni'ye dusuyor. Booster'in ilk isi boyle kaydedilirse bot
+  // onu hic yoklamaz ('yeni' ACTIVE_STATUSES'ta degil).
+  resetForm();
+  switchTab(currentTab);
   await loadPricing(); await loadAll(); subscribeRealtime();
   onMoneyChange();
 }

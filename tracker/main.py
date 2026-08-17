@@ -11,6 +11,7 @@ import sys
 
 import henrik
 from config import load_config
+from fx import FxUpdater
 from notify import Dispatcher
 from store import Store, StoreError
 from tracker import Tracker
@@ -101,6 +102,12 @@ async def run() -> None:
 
         tracker = Tracker(config, client, store, dispatcher)
         tasks.append(asyncio.create_task(tracker.run(), name="tracker"))
+
+        # Doviz kuru: panel formu bunu okuyup kur alanini kendi dolduruyor.
+        # Ayri bir gorev, cunku poll araligi (5 dk) ile kur araligi (6 sa)
+        # farkli; kuru her yoklamada cekmek gereksiz istek olurdu.
+        fx = FxUpdater(store)
+        tasks.append(asyncio.create_task(fx.run(), name="fx"))
 
         log.info("Sistem calisiyor. Durdurmak icin Ctrl+C.")
         await dispatcher.to_ops("Takip sistemi baslatildi.")

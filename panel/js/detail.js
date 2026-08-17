@@ -14,6 +14,9 @@ let drawerId = null;
 
 const TRACK_EMPTY = { rows: null, error: null };
 let drawerMatches = TRACK_EMPTY;
+/* Yorumlar da drawer acilinca cekiliyor: siparis basina birkac satir, ama
+   listede hicbir yerde gorunmuyorlar - onden cekmek bos istek olurdu. */
+let drawerComments = { rows: null, error: null };
 
 function trackerOf(id){ return tracker[id] || null; }
 
@@ -29,12 +32,18 @@ function trackChip(r){
 }
 
 function openDetail(id){
+  // Kayıt yoksa drawer'ı hiç açma: gövdesinde ÖNCEKİ siparişin parası kalır ve
+  // butonları o siparişe yazar. (Silinen ya da filtre dışı bir id'ye tıklamak
+  // realtime tazelemesinden sonra mümkün.)
+  if(!records.some(r => r.id === id)) return;
   drawerId = id;
   drawerMatches = TRACK_EMPTY;
+  drawerComments = { rows: null, error: null };
   renderDetail();
   document.getElementById('drawer').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   loadDrawerMatches(id);
+  loadComments(id);
 }
 
 function closeDetail(){
@@ -50,6 +59,72 @@ async function loadDrawerMatches(id){
   if(drawerId !== id) return;                    // kullanıcı bu arada kapattı
   drawerMatches = error ? { rows:null, error:error.message } : { rows:data||[], error:null };
   renderDetail();
+}
+
+/* --- Yorumlar -------------------------------------------------------------
+
+   Siparis uzerinde konusma. Simdiye kadar tek bir `note` alani vardi: uzerine
+   yaziliyor, kim yazdi belli olmuyor ve bot o notu MUSTERIYE iletiyor
+   (tracker/messages.py) - yani ekip ici bir not yazmanin guvenli yeri yoktu.
+
+   Yorum duzenlenemiyor, yalnizca kendi yorumun silinebiliyor: sonradan
+   degistirilebilen kayit kayit sayilmaz. */
+async function loadComments(id){
+  const { data, error } = await sb.from(TABLES.comments)
+    .select('id,author_id,body,created_at')
+    .eq('order_id', id).order('created_at', { ascending:false }).limit(100);
+  if(drawerId !== id) return;                      // kullanici bu arada kapatti
+  drawerComments = error ? { rows:null, error:error.message } : { rows:data||[], error:null };
+  renderDetail();
+}
+
+async function addComment(){
+  const el = document.getElementById('cmtBox'); if(!el) return;
+  const body = el.value.trim();
+  if(!body) return;
+  const id = drawerId;
+  const btn = document.getElementById('cmtBtn');
+  if(btn) btn.disabled = true;
+  const { error } = await sb.from(TABLES.comments)
+    .insert({ order_id:id, author_id:me.id, body });
+  if(btn) btn.disabled = false;
+  if(error){ toast('Yorum eklenemedi: ' + error.message, 'err'); return; }
+  el.value = '';
+  await loadComments(id);
+}
+
+async function delComment(cid){
+  if(!confirm('Yorum silinsin mi?')) return;
+  const { error } = await sb.from(TABLES.comments).delete().eq('id', cid);
+  if(error){ toast('Silinemedi: ' + error.message, 'err'); return; }
+  await loadComments(drawerId);
+}
+
+function commentsBlock(r){
+  const c = drawerComments;
+  let liste;
+  if(c.error)          liste = `<div class="d-empty">Yorumlar okunamadı: ${esc(c.error)}</div>`;
+  else if(!c.rows)     liste = `<div class="d-empty">yükleniyor…</div>`;
+  else if(!c.rows.length) liste = `<div class="d-empty">Henüz yorum yok.</div>`;
+  else liste = `<div class="cmt-list">${c.rows.map(x => `
+    <div class="cmt">
+      <div class="cmt-h">
+        <span class="cmt-who">${esc(nameOf(x.author_id) || 'silinmiş kullanıcı')}</span>
+        <span class="cmt-t">${esc(agoText(x.created_at))}</span>
+        ${x.author_id === me.id
+          ? `<button class="cmt-del" onclick="delComment('${esc(x.id)}')" title="Sil">✕</button>` : ''}
+      </div>
+      <div class="cmt-b">${esc(x.body)}</div>
+    </div>`).join('')}</div>`;
+
+  return `<div class="d-box"><div class="d-box-h">Yorumlar
+      ${c.rows && c.rows.length ? `<span class="ov-n">${c.rows.length}</span>` : ''}</div>
+    <div class="cmt-new">
+      <textarea id="cmtBox" rows="2" placeholder="Ekip içi not — müşteriye gitmez…"
+        onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey))addComment()"></textarea>
+      <button class="icon-btn go" id="cmtBtn" onclick="addComment()">Yaz</button>
+    </div>
+    ${liste}</div>`;
 }
 
 /* Maç rozeti: kazanç yeşil, kayıp kırmızı, beraberlik gri. */
@@ -116,6 +191,49 @@ function trackerBlock(r){
   </div>`;
 }
 
+/* Zaman çizelgesi.
+
+   Tasarımda her siparişin altında bir olay akışı vardı ("Kaan'a atandı",
+   "durum değişti", "ödeme yapıldı"). Veritabanında BÖYLE BİR TABLO YOK —
+   `resells` yalnızca son hâli tutuyor, kim ne zaman neyi değiştirdi kaydı
+   tutulmuyor. Uydurma zaman damgası basmak yerine gerçekten damgası olan iki
+   olayı çiziyoruz: siparişin açılışı ve botun çektiği her maç. Kutunun altında
+   neyin eksik olduğu da yazıyor — eksiği gizlemek, olmayan bir denetim kaydına
+   güvenmene yol açar. */
+function timelineBlock(r){
+  const olaylar = [];
+  if(r.created) olaylar.push({ t:tsMs(r.created), tur:'yeni',
+    metin:'Sipariş açıldı', kim:'panel' });
+
+  const m = drawerMatches;
+  if(m.rows) m.rows.filter(x => x.played_at).forEach(x => {
+    const rr = Number(x.rr_change) || 0;
+    olaylar.push({ t:tsMs(x.played_at), tur: rr > 0 ? 'tamam' : rr < 0 ? 'kayip' : 'devam',
+      metin: `${rr > 0 ? '+' : ''}${rr} RR${x.map_name ? ' · ' + x.map_name : ''}`,
+      kim:'takip botu' });
+  });
+
+  const ts = teslim(r);
+  if(ts) olaylar.push({ t:tsMs(r.dueAt), tur: ts.gec ? 'kayip' : 'devam',
+    metin:`Teslim tarihi · ${ts.metin}`, kim:'söz verilen', ileri:!ts.gec });
+
+  olaylar.sort((a,b) => (b.t || 0) - (a.t || 0));
+
+  const eksik = m.rows === null && isTrackedGame(r.game) && trackerOf(r.id)
+    ? 'maçlar yükleniyor…'
+    : 'Durum değişikliklerinin ve ödemelerin zaman kaydı tutulmuyor; bu liste sipariş açılışından ve botun çektiği maçlardan türetiliyor.';
+
+  return `<div class="d-box"><div class="d-box-h">Zaman çizelgesi</div>
+    ${olaylar.length ? `<div class="tl">${olaylar.map(o => `
+      <div class="tl-row${o.ileri ? ' ileri' : ''}">
+        <span class="tl-dot ${esc(o.tur)}"></span>
+        <span class="tl-txt">${esc(o.metin)}
+          <span class="tl-who">${esc(o.kim)}</span></span>
+        <span class="tl-t">${esc(o.t ? agoText(new Date(o.t).toISOString()) : '—')}</span>
+      </div>`).join('')}</div>` : '<div class="d-empty">Kayıt yok.</div>'}
+    <div class="ov-note">${esc(eksik)}</div></div>`;
+}
+
 function renderDetail(){
   if(!drawerId) return;
   const r = records.find(x=>x.id===drawerId);
@@ -152,6 +270,7 @@ function renderDetail(){
       ${isAdmin()&&r.boosterId?`<span class="chip booster">👤 ${esc(nameOf(r.boosterId))}</span>`:''}
       ${isAdmin()&&f.platform?`<span class="chip" style="border-color:rgba(212,175,55,.3);color:var(--gold)">🛒 ${esc(f.platform)}</span>`:''}
       ${r.archived?`<span class="chip" style="color:var(--amber)">🗄 arşiv</span>`:''}
+      ${dueChip(r)}
       ${(r.extras||[]).map(k=>`<span class="chip">✚ ${esc(extraLabel(k))}</span>`).join('')}
       ${r.extraWin?`<span class="chip">➕ Extra Win</span>`:''}
     </div>
@@ -160,6 +279,8 @@ function renderDetail(){
     ${money}
     ${r.jobDesc?`<div class="d-box"><div class="d-box-h">İş açıklaması</div><div class="d-note">${esc(r.jobDesc)}</div></div>`:''}
     ${r.not?`<div class="d-box"><div class="d-box-h">Not</div><div class="d-note">${esc(r.not)}</div></div>`:''}
+    ${commentsBlock(r)}
+    ${timelineBlock(r)}
 
     <div class="rec-actions" style="margin-top:18px">
       ${NEXT_STATUS[r.durum]?`<button class="icon-btn go" onclick="setStatus('${r.id}','${NEXT_STATUS[r.durum]}')">→ ${STATUS_LABEL[NEXT_STATUS[r.durum]]}</button>`:''}
@@ -169,5 +290,6 @@ function renderDetail(){
     </div>`;
 }
 
-/* Esc ile kapat — drawer modal gibi davranıyor. */
-document.addEventListener('keydown', e => { if(e.key === 'Escape' && drawerId) closeDetail(); });
+/* Escape zinciri tek yerde toplandı: app.js'teki dinleyici önce drawer'a
+   bakıyor. İki ayrı dinleyici olduğunda tek tuş hem drawer'ı kapatıyor hem
+   arama kutusunu siliyordu. */

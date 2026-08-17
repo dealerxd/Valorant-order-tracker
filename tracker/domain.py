@@ -37,6 +37,7 @@ TABLES: dict[str, str] = DOMAIN["tables"]
 ORDERS_TABLE = TABLES["orders"]
 STATE_TABLE = TABLES["state"]
 MATCHES_TABLE = TABLES["matches"]
+FX_TABLE = TABLES["fx"]
 
 # --- Rank'lar ----------------------------------------------------------------
 

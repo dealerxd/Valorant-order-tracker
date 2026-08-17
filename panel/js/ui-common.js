@@ -1,0 +1,260 @@
+/* ============ ORTAK ARAYÜZ MODELİ ============
+
+   Sidebar zili, Genel Bakış kartı ve sipariş görünümleri aynı soruları soruyor:
+   "bu iş ne kadar zaman önce oldu?", "hangi siparişler dikkat istiyor?".
+   Bunlar üç ayrı yerde hesaplanırsa aynı ekranda farklı sayılar görünür —
+   zil "7 uyarı" derken kart "4" der. O yüzden tek kaynak burası.
+
+   Eşikler de burada: bot 300 saniyede bir yokluyor (tracker/config.py
+   POLL_INTERVAL_SECONDS), takılma uyarısı 24 saat, kayıp serisi 3.
+   Bot tarafındaki değerler değişirse buradaki de değişmeli.
+*/
+
+const UI = {
+  POLL_SEC: 300,      // tracker POLL_INTERVAL_SECONDS varsayılanı
+  STALL_H: 24,        // STALL_ALERT_HOURS
+  LOSS_N: 3,          // LOSS_STREAK_ALERT
+  LS: 'rb.',          // localStorage önek — tek konvansiyon
+};
+
+/* --- Zaman ----------------------------------------------------------------
+
+   Supabase bazı sütunları saat dilimi eki olmadan döndürüyor. Ham
+   `new Date(x)` bunları YEREL saat sayar ve UTC+3'te 3 saatlik kayma
+   üretir — "3 saat önce" ile "az önce" farkı. Tek çevirici kullanıyoruz. */
+function tsMs(iso){
+  if(!iso) return null;
+  const s = String(iso);
+  // 'Z' ya da ±HH:MM yoksa UTC kabul et.
+  const norm = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(s) ? s : s.replace(' ', 'T') + 'Z';
+  const t = new Date(norm).getTime();
+  return isFinite(t) ? t : null;
+}
+function agoText(iso){
+  const t = tsMs(iso); if(t == null) return '—';
+  const d = (Date.now() - t) / 1000;
+  if(d < 0)     return 'az önce';
+  if(d < 60)    return 'az önce';
+  if(d < 3600)  return Math.round(d/60) + ' dk önce';
+  if(d < 86400) return Math.round(d/3600) + ' sa önce';
+  return Math.round(d/86400) + ' gün önce';
+}
+const hoursSince = iso => { const t = tsMs(iso); return t == null ? Infinity : (Date.now()-t)/3600000; };
+
+/* --- Kapsam ---------------------------------------------------------------
+
+   "Açık iş" tanımı da tek yerde: arşivlenmemiş ve akışı bitmemiş.
+   NEXT_STATUS'ü olan bir durum akışın sonunda değil demektir. */
+const isOpen     = r => !r.archived && !!NEXT_STATUS[r.durum];
+/* İş dışarıda mı? vendor doluysa evet. */
+const isDis      = r => !!(r.vendor && r.vendor.trim());
+const isActive   = r => !r.archived && (r.durum === 'atandi' || r.durum === 'devam');
+const activeRecs = () => records.filter(r => !r.archived);
+
+/* --- Oyun kapsamı ---------------------------------------------------------
+
+   Topbar altındaki oyun şeridi. Genel Bakış ile Sipariş listesini birlikte
+   daraltıyor — iki ekranda iki ayrı oyun filtresi olsaydı "Valorant"a
+   bakarken KPI'lar hepsini sayardı.
+
+   Zil, rozetler ve Ödemeler bilinçli olarak kapsam DIŞI: filtre yüzünden bir
+   uyarıyı ya da bir borcu kaçırmak, filtrenin işe yaramasından daha pahalı. */
+let gameScope = lsGet('gameScope', '');       // '' = hepsi
+const inScope   = r => !gameScope || r.game === gameScope;
+const scopeRecs = () => activeRecs().filter(inScope);
+
+/* --- Teslim tarihi ---------------------------------------------------------
+
+   Bugüne kadar bir işin geciktiğini yalnızca takip botunun "24 saattir maç
+   yok" uyarısından anlıyorduk — o da sadece Valorant'ta ve sadece Riot ID
+   bağlıysa çalışıyor. Rocket League siparişi süresiz duruyordu.
+
+   Tarih girilmemişse iş "süresiz": uydurma bir son tarih koymuyoruz.
+   Kapanmış işin gecikmesi de yok — teslim edildiyse konu kapanmıştır. */
+function teslim(r){
+  if(!r.dueAt || !isOpen(r)) return null;
+  const t = tsMs(r.dueAt);
+  if(t == null) return null;
+  // Gün bazında karşılaştırıyoruz, saat bazında değil: 15 Ağustos'a söz
+  // verilen iş 15 Ağustos boyunca geç sayılmamalı. tsMs zaten UTC'ye
+  // normalleştiriyor, iki taraf da aynı ölçekte.
+  const fark = Math.floor(t / 86400000) - Math.floor(Date.now() / 86400000);
+  if(fark < 0)  return { gec:true,  gun:-fark, metin:`${-fark} gün geç` };
+  if(fark === 0) return { gec:false, gun:0, metin:'bugün teslim' };
+  if(fark === 1) return { gec:false, gun:1, metin:'yarın teslim' };
+  return { gec:false, gun:fark, metin:`${fark} gün kaldı` };
+}
+const isGec = r => !!(teslim(r) || {}).gec;
+
+/* --- İlerleme -------------------------------------------------------------
+
+   İki farklı şey tek çubukta gösterilemez: takip botunun ölçtüğü GERÇEK elo
+   ilerlemesi ile işin akıştaki adımı. Hangisi çizildiyse etiket onu söylüyor;
+   yoksa "%60" görüp bunu maç sonucu sanmak işten bile değil. */
+const STEP_PCT = { yeni:0, atandi:20, devam:60, tamam:100, odendi:100 };
+
+function ilerleme(r){
+  const t = tracker[r.id];
+  if(t && !t.paused && t.target_elo != null && t.current_elo != null){
+    const oran = eloProgress(t.start_elo, t.current_elo, t.target_elo);
+    const su = rankFromElo(t.current_elo);
+    return { oran, takip:true,
+      etiket: `${su ? su.label + ' · ' : ''}%${Math.round(oran*100)}` };
+  }
+  const bekliyor = t && t.paused ? 'duraklatıldı'
+                 : isTrackedGame(r.game) && r.riotId ? 'takip bekliyor' : 'takip yok';
+  return { oran: (STEP_PCT[r.durum] ?? 0) / 100, takip:false,
+           etiket: `${bekliyor} · ${STATUS_LABEL[r.durum] || r.durum}` };
+}
+
+/* --- Takip durumu ---------------------------------------------------------
+
+   Panel üç durumu ayırt edemiyordu: bot kapalı, RLS okutmuyor, hiç takipli iş
+   yok. Üçü de boş tracker{} veriyor. En azından "hiç kayıt yok" ile "kayıt var
+   ama eski" ayrımını yapıyoruz; ötesini panel bilemez. */
+function botStatus(){
+  const rows = Object.values(tracker).filter(t => {
+    const r = records.find(x => x.id === t.order_id);
+    return r && !r.archived;
+  });
+  if(!rows.length) return { hal:'yok', metin:'takipli iş yok', hesap:0, duraklatilan:0, son:null };
+
+  const canli = rows.filter(t => !t.paused);
+  const duraklatilan = rows.length - canli.length;
+  const hesap = new Set(canli.map(t => t.puuid).filter(Boolean)).size;
+  const son = canli.map(t => t.last_poll_at).filter(Boolean).sort().pop() || null;
+
+  if(!son) return { hal:'bilinmiyor', metin:'yoklama kaydı yok', hesap, duraklatilan, son:null };
+  const dk = (Date.now() - tsMs(son)) / 60000;
+  // Üç tur kaçırmak anlamlı bir sinyal; 60 dk'yı geçince artık gecikme değil.
+  const hal = dk <= UI.POLL_SEC * 3 / 60 ? 'calisiyor' : dk <= 60 ? 'gecikmeli' : 'durmus';
+  const metin = { calisiyor:'çalışıyor', gecikmeli:'gecikmeli', durmus:'durmuş olabilir' }[hal];
+  return { hal, metin, hesap, duraklatilan, son };
+}
+
+/* --- Uyarılar -------------------------------------------------------------
+
+   Zil de Genel Bakış kartı da BUNU tüketiyor, kendi listesini kurmuyor.
+   Finans uyarıları yalnızca admin'e: booster'da finance{} zaten boş, ona
+   "boost fiyatı girilmemiş" demek her iş için yanlış alarm olurdu. */
+function alertModel(){
+  const out = [];
+  const push = (tur, agirlik, metin, kayit) =>
+    out.push({ tur, agirlik, metin, id: kayit ? kayit.id : null });
+
+  for(const r of activeRecs()){
+    const t = tracker[r.id];
+
+    // Geciken iş en ağır uyarı: müşteri bekliyor ve haberin yok.
+    // Dışarıya verilmiş işte de geçerli — satıcı gecikirse müşteri seni arar.
+    const ts = teslim(r);
+    if(ts && ts.gec)
+      push('gecikti', 4, `#${r.id.slice(0,8)} ${ts.metin}`, r);
+
+    if(isActive(r) && !r.boosterId && !isDis(r))
+      push('atanmadi', 2, `#${r.id.slice(0,8)} atanmadı`, r);
+
+    // 'yeni' hariç: sipariş daha yeni açılmışken fiyatın girilmemiş olması
+    // normal. İş boostçuya geçtikten sonra hâlâ eksikse gerçek bir boşluk.
+    if(isAdmin() && r.durum !== 'yeni' && !hasFin(r.id))
+      push('finansyok', 1, `#${r.id.slice(0,8)} boost fiyatı girilmemiş`, r);
+
+    if(isAdmin() && !isOpen(r) && r.payout > 0 && !r.paid && r.boosterId)
+      push('odenmedi', 1, `${nameOf(r.boosterId)} · ${fmt(r.payout,'TRY')} ödenmedi`, r);
+
+    // Takip uyarıları yalnızca botun yokladığı oyunlarda anlamlı.
+    if(isTrackedGame(r.game) && isActive(r)){
+      if(r.riotId && !t)
+        push('baglanmadi', 2, `#${r.id.slice(0,8)} Riot ID girildi, bağlanmadı`, r);
+      if(t && t.paused)
+        push('duraklatildi', 2, `#${r.id.slice(0,8)} takip duraklatıldı`, r);
+      // last_match_at bos = henuz hic mac cekilmemis (yeni baglandi).
+      // hoursSince(null) Infinity donuyor; bot da bu durumda uyarmiyor
+      // (tracker.py _handle_idle son mac yoksa baslangic zamanina bakiyor).
+      if(t && !t.paused && t.last_match_at && hoursSince(t.last_match_at) > UI.STALL_H)
+        push('takildi', 3, `#${r.id.slice(0,8)} ${UI.STALL_H} saattir maç yok`, r);
+      if(t && (t.loss_streak || 0) >= UI.LOSS_N)
+        push('kayip', 3, `#${r.id.slice(0,8)} üst üste ${t.loss_streak} mağlubiyet`, r);
+    }
+  }
+  return out.sort((a,b) => b.agirlik - a.agirlik);
+}
+
+/* --- Para tanimlari -------------------------------------------------------
+
+   Ayni etiket ("Net Kar", "Booster Borcu") uc ekranda uc farkli hesap
+   uretiyordu. Rapor ve Genel Bakis ayni konvansiyonu kullaniyordu, Siparisler
+   satiri ayrikti - ayni veriden 900 TL ve 1700 TL cikiyordu. Tanim artik burada.
+
+   Konvansiyon (report.js'ten): GELIR yalnizca finans kaydi olan islerden,
+   BOOSTER UCRETI tum aktif islerden. Finans kaydi girilmemis bir isin ucreti
+   odenecek ama geliri henuz bilinmiyor - onu kardan dusmemek kari sisirirdi.
+   Bu yuzden ekranlarda "N isin finansi girilmemis" uyarisi da veriliyor. */
+/* Dış satıcı maliyeti TL'ye çevriliyor. Kur, siparişin kendi finans kaydındaki
+   kurdan alınıyor (sipariş anında sabitlenmiş olan); yoksa TL varsayılıyor —
+   uydurma bir kur kullanmaktansa eksik göstermek yeğ. */
+function disMaliyetTL(r){
+  if(!isDis(r) || !r.vendorCost) return 0;
+  if(r.vendorCur === 'TRY') return Math.round(r.vendorCost);
+  const kur = Number((finance[r.id] || {}).rate) || 0;
+  return kur ? Math.round(r.vendorCost * kur) : 0;
+}
+/* Kuru bilinmediği için hesaba katılamayan dış maliyetler — ekranda söylenmeli. */
+const disKuruYok = r => isDis(r) && r.vendorCost > 0 && r.vendorCur !== 'TRY'
+                        && !Number((finance[r.id] || {}).rate);
+
+/* Liste dışarıdan verilebiliyor: Genel Bakış ve Siparişler oyun kapsamına
+   uyuyor, Ödemeler ekranı ise borcun tamamını göstermek için aktif işlerin
+   hepsini geçiriyor. */
+function paraOzeti(liste){
+  const aktif = liste || scopeRecs();
+  const finansli = aktif.filter(r => hasFin(r.id));
+  const brut = finansli.reduce((a,r) => a + brutTLof(r.id), 0);
+  const netGelir = finansli.reduce((a,r) => a + netGelirTLof(r.id), 0);
+  const ucret = aktif.reduce((a,r) => a + r.payout, 0);
+  // Dışarıya verilen işin maliyeti de gider: düşülmezse o işlerde kâr
+  // olduğundan yüksek görünür.
+  const disGider = aktif.reduce((a,r) => a + disMaliyetTL(r), 0);
+  return {
+    brut, netGelir, ucret, disGider,
+    kurYok: aktif.filter(disKuruYok).length,
+    kar: netGelir - ucret - disGider,
+    finanssiz: aktif.filter(r => r.durum !== 'yeni' && !hasFin(r.id)).length,
+    // Borc = isi biten ama odenmemis ucretler. Devam eden isin ucreti henuz
+    // borc degil; is yarim kalirsa odenmeyebilir.
+    borc: aktif.filter(r => !isOpen(r) && !r.paid && r.payout > 0)
+               .reduce((a,r) => a + r.payout, 0),
+    // Dış satıcıya olan borç ayrı tutulur: farklı kişiye, farklı para biriminde.
+    disBorc: aktif.filter(r => isDis(r) && !r.vendorPaid)
+                  .reduce((a,r) => a + disMaliyetTL(r), 0),
+  };
+}
+
+/* Nav rozetleri. Boş/0 dönerse rozet çizilmez. */
+function navBadge(tab){
+  switch(tab){
+    case 'genel':      return alertModel().length;
+    case 'siparis':    return activeRecs().filter(isOpen).length;
+    case 'odeme':      return isAdmin()
+      ? new Set(activeRecs().filter(r => !isOpen(r) && !r.paid && r.payout > 0 && r.boosterId && !isDis(r))
+                            .map(r => r.boosterId)
+                 ).size
+        + new Set(activeRecs().filter(r => isDis(r) && !r.vendorPaid && r.vendorCost > 0)
+                              .map(r => r.vendor.trim())).size
+      : 0;
+    case 'arsiv':      return records.filter(r => r.archived).length;
+    case 'boosterlar': return people.filter(p => p.active && p.role === 'booster').length;
+    default:           return 0;
+  }
+}
+
+/* --- localStorage ---------------------------------------------------------
+   Kullanıcı tercihleri; okunamazsa (gizli sekme, kota) sessizce varsayılana
+   düşüyoruz — tercih kaydı yüzünden panel açılmamalı. */
+function lsGet(k, def){
+  try { const v = localStorage.getItem(UI.LS + k); return v === null ? def : v; }
+  catch(e){ return def; }
+}
+function lsSet(k, v){
+  try { localStorage.setItem(UI.LS + k, v); } catch(e){}
+}

@@ -12,12 +12,15 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+import httpx
+
 import henrik
 import messages
 import ranks
 import store as store_mod
 from config import Config
 from notify import Dispatcher
+from store import StoreError
 from tracker import Tracker
 
 PASSED: list[str] = []
@@ -701,6 +704,94 @@ async def test_game_filter() -> None:
     check("poll turu takip disi siparislerle sorunsuz gecti", True)
 
 
+# --- doviz kuru ----------------------------------------------------------------
+
+
+async def test_fx() -> None:
+    """Kur cekimi: bicim degisirse ve servis duserse ne oluyor."""
+    print("\n[kur]")
+    import fx as fxmod
+
+    # Iki farkli servisin cevap bicimi.
+    check("frankfurter bicimi okunuyor",
+          fxmod._parse("frankfurter", "USD", {"rates": {"TRY": 41.25}}) == 41.25)
+    check("er-api bicimi okunuyor",
+          fxmod._parse("erapi", "USD", {"result": "success", "rates": {"TRY": 41.25}}) == 41.25)
+    # Bicim degisirse SESSIZCE yanlis sayi donmemeli.
+    check("beklenmeyen bicim None donuyor",
+          fxmod._parse("frankfurter", "USD", {"veri": {"TRY": 41}}) is None)
+    check("TRY alani yoksa None",
+          fxmod._parse("frankfurter", "USD", {"rates": {"EUR": 1.1}}) is None)
+    check("basarisiz er-api cevabi None",
+          fxmod._parse("erapi", "USD", {"result": "error", "rates": {"TRY": 41}}) is None)
+
+    class SahteResp:
+        def __init__(self, payload, status=200):
+            self._p, self.status_code = payload, status
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise httpx.HTTPStatusError("hata", request=None, response=None)
+
+        def json(self):
+            return self._p
+
+    class SahteClient:
+        def __init__(self, cevaplar):
+            self.cevaplar, self.istekler = list(cevaplar), []
+
+        async def get(self, url, **kw):
+            self.istekler.append(url)
+            c = self.cevaplar.pop(0)
+            if isinstance(c, Exception):
+                raise c
+            return c
+
+    # Ilk kaynak duserse ikinciye gecilmeli.
+    c = SahteClient([httpx.ConnectError("dustu"),
+                     SahteResp({"result": "success", "rates": {"TRY": 42.0}})])
+    sonuc = await fxmod.fetch_rate(c, "USD")
+    check("ilk kaynak duserse ikinci deneniyor", sonuc == (42.0, "erapi"), str(sonuc))
+    check("iki kaynak da denendi", len(c.istekler) == 2)
+
+    # Hicbiri vermezse None - uydurma kur YAZILMAMALI.
+    c = SahteClient([httpx.ConnectError("x"), httpx.ConnectError("y")])
+    check("hicbir kaynak vermezse None", await fxmod.fetch_rate(c, "USD") is None)
+
+    # Sifir/negatif kur veri hatasi; yazilirsa kar hesabi bozulur.
+    c = SahteClient([SahteResp({"rates": {"TRY": 0}}),
+                     SahteResp({"result": "success", "rates": {"TRY": 41.0}})])
+    sonuc = await fxmod.fetch_rate(c, "USD")
+    check("sifir kur reddediliyor, sonraki kaynaga geciliyor", sonuc == (41.0, "erapi"), str(sonuc))
+
+    # update_once: yazilamayan kur digerlerini engellememeli.
+    class SahteStore:
+        def __init__(self, patlayan=()):
+            self.yazilan, self.patlayan = [], set(patlayan)
+
+        async def save_fx_rate(self, currency, as_of, rate, source):
+            if currency in self.patlayan:
+                raise StoreError("yazilamadi")
+            self.yazilan.append((currency, rate, source))
+
+    st = SahteStore(patlayan={"USD"})
+    up = fxmod.FxUpdater(st)
+    c = SahteClient([SahteResp({"rates": {"TRY": 41.0}}), SahteResp({"rates": {"TRY": 47.0}})])
+    yazilan = await up.update_once(c)
+    check("yazilamayan kur digerini engellemiyor",
+          yazilan == {"EUR": 47.0} and st.yazilan == [("EUR", 47.0, "frankfurter")],
+          f"{yazilan} / {st.yazilan}")
+
+    # Kur cekilemezse ESKI kur silinmemeli: update_once hicbir DELETE yapmiyor.
+    st2 = SahteStore()
+    c2 = SahteClient([httpx.ConnectError("x"), httpx.ConnectError("y"),
+                      httpx.ConnectError("z"), httpx.ConnectError("w")])
+    check("kur alinamayinca hicbir sey yazilmiyor",
+          await fxmod.FxUpdater(st2).update_once(c2) == {} and st2.yazilan == [])
+
+    check("FX tablosu sozlesmeden", fxmod.FX_TABLE == "fx_rates")
+
+
 def main() -> int:
     test_shared_contract()
     asyncio.run(test_game_filter())
@@ -714,6 +805,7 @@ def main() -> int:
     asyncio.run(test_tracker())
     asyncio.run(test_season_change())
     asyncio.run(test_messages())
+    asyncio.run(test_fx())
     print(f"\n{len(PASSED)} kontrol gecti.\n")
     return 0
 

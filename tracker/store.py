@@ -21,6 +21,7 @@ from domain import (
     ACTIVE_STATUSES,
     DEFAULT_GAME,
     DEFAULT_REGION_API,
+    FX_TABLE,
     LISTABLE_STATUSES,
     MATCHES_TABLE,
     ORDERS_TABLE,
@@ -224,6 +225,20 @@ class Store:
             "PATCH", f"/{ORDERS_TABLE}",
             params={"id": f"eq.{order_id}"},
             json={"riot_id": riot_id},
+        )
+
+    # --- Doviz kurlari -------------------------------------------------------
+
+    async def save_fx_rate(self, currency: str, as_of, rate: float, source: str) -> None:
+        """Gunun kurunu yazar. (currency, as_of) birincil anahtar oldugu icin
+        ayni gun ikinci cagri kopya satir birakmadan uzerine yaziyor."""
+        await self._request(
+            "POST", f"/{FX_TABLE}",
+            headers={"Prefer": "resolution=merge-duplicates"},
+            json={
+                "currency": currency, "as_of": str(as_of),
+                "rate": round(float(rate), 4), "source": source,
+            },
         )
 
     # --- tracker_state -------------------------------------------------------
