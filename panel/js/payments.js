@@ -11,9 +11,49 @@
    alanında değil — bir siparişin notunu düzenlemek borcu silmesin.
 */
 
+/* --- Ödeme dönemi ---------------------------------------------------------
+
+   "Borç takibi dağınık" şikayetinin cevabı: ödeme genelde bir DÖNEM sonunda
+   toptan yapılıyor ("bu ayın hakedişleri"), tek tek iş bazında değil. Dönem
+   siparişin TARİHİNE göre süzüyor — ödemenin kendisinin tarihi tutulmuyor,
+   olmayan bir alana dayanmaktansa var olanı kullanıyoruz.
+
+   Varsayılan "tümü": bir borcu dönem filtresi yüzünden görmemek, filtrenin
+   sağladığı düzenden pahalı. */
+const DONEMLER = [
+  ['hepsi',  'Tümü',        () => null],
+  ['ay',     'Bu ay',       () => { const d = new Date(); return [yeniAy(d, 0), yeniAy(d, 1)]; }],
+  ['gecenay','Geçen ay',    () => { const d = new Date(); return [yeniAy(d, -1), yeniAy(d, 0)]; }],
+  ['hafta',  'Son 7 gün',   () => [Date.now() - 7*86400000, Infinity]],
+];
+const yeniAy = (d, k) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + k, 1);
+
+let odemeDonem = lsGet('odemeDonem', 'hepsi');
+
+function setOdemeDonem(k){
+  odemeDonem = k; lsSet('odemeDonem', k);
+  odemeSecim.clear();
+  renderPayments();
+}
+
+function donemAralik(){
+  const d = DONEMLER.find(x => x[0] === odemeDonem);
+  return d ? d[2]() : null;
+}
+
+/* Döneme düşüyor mu? Aralık yoksa hepsi düşer. */
+function donemde(r){
+  const a = donemAralik();
+  if(!a) return true;
+  const t = tsMs(r.tarih);
+  if(t == null) return false;
+  return t >= a[0] && t < a[1];
+}
+
 function odemeBoosterGruplari(){
   const gruplar = {};
   activeRecs()
+    .filter(donemde)
     .filter(r => !isOpen(r) && !r.paid && r.payout > 0 && r.boosterId && !isDis(r))
     .forEach(r => {
       (gruplar[r.boosterId] ||= { id:r.boosterId, ad:nameOf(r.boosterId), isler:[], toplam:0 });
@@ -26,6 +66,7 @@ function odemeBoosterGruplari(){
 function odemeSaticiGruplari(){
   const gruplar = {};
   activeRecs()
+    .filter(donemde)
     .filter(r => isDis(r) && !r.vendorPaid && r.vendorCost > 0)
     .forEach(r => {
       const ad = r.vendor.trim();
@@ -59,6 +100,24 @@ function odemeSec(anahtar, on){
 }
 function odemeSecTemizle(){ odemeSecim.clear(); renderPayments(); }
 
+/* Seçilenlerin tamamını tek turda ödendi işaretler. Ödeme günü sırayla
+   dört kişiye tıklamak yerine seç-öde. Booster ve satıcı ayrı alanlara
+   yazıldığı için iki ayrı yazma; ikisi de kısa dönerse ayrı ayrı uyarılır. */
+async function odeSecilenler(){
+  const bst = odemeBoosterGruplari().filter(g => odemeSecim.has('b:' + g.id));
+  const sat = odemeSaticiGruplari().filter(g => odemeSecim.has('v:' + g.ad));
+  if(!bst.length && !sat.length) return;
+  const tutar = bst.reduce((a,g) => a + g.toplam, 0) + sat.reduce((a,g) => a + g.tl, 0);
+  const kisi = bst.length + sat.length;
+  const isSayisi = bst.reduce((a,g) => a + g.isler.length, 0) + sat.reduce((a,g) => a + g.isler.length, 0);
+  if(!confirm(`${kisi} alacaklı · ${isSayisi} iş · ${fmt(tutar,'TRY')} ödendi işaretlenecek. Devam?`)) return;
+  const bIds = bst.flatMap(g => g.isler.map(r => r.id));
+  const vIds = sat.flatMap(g => g.isler.map(r => r.id));
+  odemeSecim.clear();
+  if(bIds.length) await bulkPatch(bIds, { paid:true }, 'Ödeme işaretleme');
+  if(vIds.length) await bulkPatch(vIds, { vendor_paid:true }, 'Satıcı ödemesi');
+}
+
 /* Bir boostçunun tüm bekleyen işlerini ödendi işaretler. */
 async function odeBooster(boosterId){
   const isler = odemeBoosterGruplari().find(g => g.id === boosterId);
@@ -81,7 +140,7 @@ function renderPayments(){
 
   // Borç oyun şeridinden etkilenmemeli: "Valorant"a bakarken Rocket League
   // borcunun kaybolması ödemeyi unutturur.
-  const P = paraOzeti(activeRecs());
+  const P = paraOzeti(activeRecs().filter(donemde));
   const bst = odemeBoosterGruplari();
   const sat = odemeSaticiGruplari();
 
@@ -90,6 +149,10 @@ function renderPayments(){
       <div class="ov-kpi-l">${esc(etiket)}</div>
       <div class="ov-kpi-v">${esc(deger)}</div>
       <div class="ov-kpi-h">${esc(ipucu)}</div></div>`;
+
+  const donemSecici = `<div class="gstrip pay-donem">${DONEMLER.map(([k, l]) =>
+    `<button class="gs${k === odemeDonem ? ' active' : ''}" onclick="setOdemeDonem('${esc(k)}')">${esc(l)}</button>`
+  ).join('')}</div>`;
 
   const kpi = `<div class="ov-kpis">
     ${kart('Booster borcu', fmt(P.borc,'TRY'), 'red', `${bst.length} kişi`)}
@@ -160,8 +223,9 @@ function renderPayments(){
   const secBar = odemeSecim.size
     ? `<div class="pay-bar"><span class="bulk-n">${odemeSecim.size} seçili</span>
         <span class="pay-bar-t">${fmt(secTutar,'TRY')}</span>
+        <button class="icon-btn go" onclick="odeSecilenler()">💰 Seçilenleri ödendi işaretle</button>
         <button class="icon-btn" onclick="odemeSecTemizle()">temizle</button></div>`
     : '';
 
-  box.innerHTML = kpi + uyari + secBar + `<div class="ov-grid">${boosterHTML}${saticiHTML}</div>`;
+  box.innerHTML = donemSecici + kpi + uyari + secBar + `<div class="ov-grid">${boosterHTML}${saticiHTML}</div>`;
 }

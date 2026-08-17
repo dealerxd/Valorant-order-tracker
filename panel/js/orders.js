@@ -61,12 +61,60 @@ function renderFormExtras(){
 }
 function formSelectedExtras(){ return EXTRA_DEF.filter(e=>{const c=document.getElementById('fx-'+e.key);return c&&c.checked;}).map(e=>e.key); }
 
+/* --- Otomatik kur ---------------------------------------------------------
+
+   Kur elle giriliyordu; unutuldugunda kar hesabi sessizce bozuluyor (dis
+   kaynak maliyeti 0 sayiliyor, brut gelir TL'ye cevrilemiyor), yanlis
+   girildiginde de fark aylar sonra ortaya cikiyor.
+
+   Otomatik doldurulan kur SABIT DEGIL: alan hala duzenlenebilir, cunku
+   pazaryeri kendi kurunu uygulayabiliyor. Elle degistirildiginde bir daha
+   ustune yazmiyoruz - `data-auto` bayragi bunu isaretliyor. */
+function kurBilgisi(cur){
+  const x = fx[cur];
+  if(!x || !x.rate) return null;
+  const gun = Math.floor(Date.now()/86400000) - Math.floor(tsMs(x.as_of)/86400000);
+  return { ...x, gun, bayat: gun > 3 };
+}
+
+function kurUygula(){
+  const el = document.getElementById('rate'), not = document.getElementById('rateNote');
+  if(!el) return;
+  const cur = document.getElementById('currency').value;
+  if(cur === 'TRY'){ if(not) not.textContent = ''; return; }
+  const k = kurBilgisi(cur);
+  if(!k){
+    if(not) not.innerHTML = '<span class="warn">güncel kur yok — elle gir</span>';
+    return;
+  }
+  // Kullanici elle yazdiysa dokunma.
+  if(el.value && el.dataset.auto !== '1'){
+    if(not) not.innerHTML = `bugünkü ${esc(cur)}: <b>${k.rate}</b>
+      <button type="button" class="lnk" onclick="kurAl()">kullan</button>`;
+    return;
+  }
+  el.value = k.rate; el.dataset.auto = '1';
+  if(not) not.innerHTML = k.bayat
+    ? `<span class="warn">kur ${k.gun} günlük — ${esc(k.as_of)}</span>`
+    : `otomatik · ${esc(k.as_of)}${k.source ? ' · ' + esc(k.source) : ''}`;
+}
+function kurAl(){
+  const el = document.getElementById('rate');
+  el.dataset.auto = '1'; kurUygula(); onMoneyChange();
+}
+/* Alana elle dokunuldu: bundan sonra otomatik yazma. */
+function onRateInput(){
+  document.getElementById('rate').dataset.auto = '';
+  onMoneyChange();
+}
+
 function onPlatformChange(){
   const p = document.getElementById('platform').value;
   const cfg = PLATFORMS[p];
   const fs = document.getElementById('feePct');
   if(cfg){
     document.getElementById('currency').value = cfg.cur;
+    kurUygula();
     // komisyon seçeneklerini panele göre kısıtla
     fs.innerHTML = '<option value="0">%0</option>' + cfg.fees.map(f=>`<option value="${f}">%${f}</option>`).join('');
     fs.value = cfg.fees[0];
@@ -109,6 +157,7 @@ function onRankChange(){
 }
 
 function onMoneyChange(){
+  kurUygula();
   const cost=Number(document.getElementById('cost').value)||0;        // boost fiyatı = GELİR
   const cur=document.getElementById('currency').value;
   const feePct=Number(document.getElementById('feePct').value)||0;
@@ -234,7 +283,8 @@ function editRecord(id){
   document.getElementById('platformRef').value=f.platformRef||'';
   document.getElementById('cost').value=f.cost||'';document.getElementById('currency').value=f.costCur||'USD';
   document.getElementById('feePct').value=f.feePct||0;
-  document.getElementById('rate').value=f.rate||'';
+  const re=document.getElementById('rate');
+  re.value=f.rate||''; re.dataset.auto = f.rate ? '' : '1';   // kayitli kur korunur
   const pe=document.getElementById('payout');pe.value=r.payout||'';pe.dataset.manual='1';
   const ds=document.getElementById('durum');ds.value=r.durum;
   if(ds.value!==r.durum) ds.value='tamam';   // eski 'odendi' durumu artık seçenek değil → Tamam'a düşür
@@ -314,6 +364,7 @@ function resetForm(){
   document.getElementById('unitCount').value='1';
   document.getElementById('platform').value='';document.getElementById('feePct').value='0';
   document.getElementById('currency').value='USD';document.getElementById('payout').dataset.manual='';
+  document.getElementById('rate').dataset.auto='1';   // yeni siparis: kur otomatik gelsin
   document.getElementById('boosterSel').value='';
   const gs=document.getElementById('gameSel'); if(gs){ gs.value=DEFAULT_GAME; onGameChange(); }
   const fu=document.getElementById('fulfil');
@@ -418,11 +469,55 @@ function renderStats(){
    Tek kaynak ordersView.durum. */
 
 const ordersView = {
-  mode:  lsGet('ordersMode', 'kart'),   // kart | tablo | pano
+  // Varsayilan TABLO: kart gorunumu on isten sonra taranamaz hale geliyordu,
+  // ekrana ucu sigiyor ve "hangi is nerede" sorusu kaydirma ile cevaplaniyordu.
+  mode:  lsGet('ordersMode', 'tablo'),  // tablo | kart | pano
   durum: '',                            // '' = hepsi
   src:   '',                            // '' = hepsi | ic | dis
+  sort:  lsGet('ordersSort', 'due'),    // bkz. SORTS
+  dir:   lsGet('ordersDir', 'asc'),     // asc | desc
   sel:   new Set(),                     // toplu seçim, sipariş id'leri
 };
+
+/* Siralama anahtarlari. Her biri karsilastirilabilir bir deger donduruyor;
+   null/bos olanlar YONDEN BAGIMSIZ olarak sona atiliyor - teslim tarihi
+   girilmemis isler listenin basini kaplamasin diye. */
+const SORTS = {
+  due:     { etiket:'Teslim',  al:r => tsMs(r.dueAt) },
+  tarih:   { etiket:'Tarih',   al:r => tsMs(r.tarih) },
+  durum:   { etiket:'Durum',   al:r => FORM_STATUSES.indexOf(r.durum) },
+  is:      { etiket:'İş',      al:r => routeText(r).toLocaleLowerCase('tr') },
+  oyun:    { etiket:'Oyun',    al:r => gameOf(r.game).label },
+  booster: { etiket:'Booster', al:r => isDis(r) ? r.vendor : (r.boosterId ? nameOf(r.boosterId) : '') },
+  ilerleme:{ etiket:'İlerleme',al:r => ilerleme(r).oran },
+  net:     { etiket:'Net Gelir', al:r => hasFin(r.id) ? netGelirTLof(r.id) : null, admin:true },
+  kar:     { etiket:'Kâr',     al:r => hasFin(r.id) ? netGelirTLof(r.id) - r.payout - disMaliyetTL(r) : null, admin:true },
+  ucret:   { etiket:'Ücret',   al:r => r.payout },
+};
+
+function setSort(k){
+  if(!SORTS[k]) return;
+  // Ayni sutuna tekrar tiklamak yonu cevirir; yeni sutun kendi dogal yonuyle
+  // baslar: tarihlerde "en yakin once", parada "en cok once".
+  if(ordersView.sort === k) ordersView.dir = ordersView.dir === 'asc' ? 'desc' : 'asc';
+  else { ordersView.sort = k; ordersView.dir = ['net','kar','ucret','ilerleme'].includes(k) ? 'desc' : 'asc'; }
+  lsSet('ordersSort', ordersView.sort); lsSet('ordersDir', ordersView.dir);
+  render();
+}
+
+function sortRecords(list){
+  const s = SORTS[ordersView.sort] || SORTS.due;
+  const yon = ordersView.dir === 'desc' ? -1 : 1;
+  return [...list].sort((a, b) => {
+    const x = s.al(a), y = s.al(b);
+    const xb = x == null || x === '', yb = y == null || y === '';
+    if(xb && yb) return 0;
+    if(xb) return 1;          // bos olan hep sonda, yonden bagimsiz
+    if(yb) return -1;
+    if(x === y) return 0;
+    return (typeof x === 'string' ? x.localeCompare(y, 'tr') : (x < y ? -1 : 1)) * yon;
+  });
+}
 
 function setOrdersView(mode){
   ordersView.mode = mode; lsSet('ordersMode', mode);
@@ -517,9 +612,36 @@ function renderSrcTabs(){
        ${esc(l)}<span class="st-n">${say[k]}</span></button>`).join('');
 }
 
+/* Siralama secici. Dar ekranda tablo basliklari yiginlasip kayboluyor;
+   siralamanin oradan da erisilebilir olmasi gerek. Genis ekranda da
+   klavye/fare ile tek adimda yon degistirmeye yariyor. */
+function renderSortSel(){
+  const box = document.getElementById('sortSel'); if(!box) return;
+  const admin = isAdmin();
+  const secenekler = Object.entries(SORTS).filter(([, s]) => !s.admin || admin);
+  box.innerHTML = secenekler.map(([k, s]) =>
+    `<option value="${esc(k)}" ${k === ordersView.sort ? 'selected' : ''}>${esc(s.etiket)}</option>`).join('');
+}
+function onSortSel(v){
+  if(v === ordersView.sort) return;      // setSort yonu cevirirdi; select'te bu istenmiyor
+  ordersView.sort = v;
+  ordersView.dir = ['net','kar','ucret','ilerleme'].includes(v) ? 'desc' : 'asc';
+  lsSet('ordersSort', v); lsSet('ordersDir', ordersView.dir);
+  render();
+}
+function toggleSortDir(){
+  ordersView.dir = ordersView.dir === 'asc' ? 'desc' : 'asc';
+  lsSet('ordersDir', ordersView.dir);
+  render();
+}
+
 function renderViewSwitch(){
   const box = document.getElementById('viewSwitch'); if(!box) return;
-  const modlar = [['kart','▤','Kart'], ['tablo','☰','Tablo'], ['pano','▥','Pano']];
+  renderSortSel();
+  const yon = document.getElementById('sortDir');
+  if(yon){ yon.textContent = ordersView.dir === 'asc' ? '↑' : '↓';
+           yon.title = ordersView.dir === 'asc' ? 'Artan' : 'Azalan'; }
+  const modlar = [['tablo','☰','Tablo'], ['kart','▤','Kart'], ['pano','▥','Pano']];
   box.innerHTML = modlar.map(([m, i, t]) =>
     `<button class="vw${m===ordersView.mode?' active':''}" onclick="setOrdersView('${m}')" title="${t}">${i}</button>`).join('');
 }
@@ -548,7 +670,18 @@ function renderBulkBar(){
   const n = ordersView.sel.size;
   bar.classList.toggle('hidden', n === 0);
   if(!n) return;
+  // Toplu atama en cok tekrar eden is: on siparise tek tek booster secmek
+  // yirmi tiklamaydi.
+  const atama = isAdmin()
+    ? `<select class="bulk-sel" onchange="bulkAssign(this.value);this.value=''">
+         <option value="">Booster ata…</option>
+         ${people.filter(p => p.active && p.role === 'booster')
+                 .map(p => `<option value="${esc(p.id)}">${esc(p.display_name)}</option>`).join('')}
+         <option value="__bos">— atamayı kaldır</option>
+       </select>`
+    : '';
   bar.innerHTML = `<span class="bulk-n">${n} seçili</span>
+    ${atama}
     <button class="icon-btn go" onclick="bulkAdvance()">→ Durumu ilerlet</button>
     ${isAdmin() ? `<button class="icon-btn" onclick="bulkArchive(true)">🗄 Arşivle</button>
                    <button class="icon-btn" onclick="bulkPaid(true)">💰 Ödendi</button>` : ''}
@@ -580,6 +713,29 @@ function bulkAdvance(){
   if(!confirm(`${adet} işin durumu ilerletilecek. Devam?`)) return;
   Object.entries(gruplar).forEach(([durum, ids]) => bulkPatch(ids, { durum }, 'Durum ilerletme'));
 }
+/* Toplu booster atama. Disariya verilmis isler ATLANIYOR: o islerin ucreti
+   satiya odeniyor, booster atamak borcu iki kere yazardi. Kac tanesinin
+   atlandigi da soyleniyor - sessizce atlamak "atadim saniyorum" hatasi olur. */
+function bulkAssign(val){
+  if(!val) return;
+  const secili = filterRecords().filter(r => ordersView.sel.has(r.id));
+  const uygun = secili.filter(r => !isDis(r));
+  const atlanan = secili.length - uygun.length;
+  if(!uygun.length){ alert('Seçililerin hepsi dış kaynak — booster atanmaz.'); return; }
+  const bos = val === '__bos';
+  const ad = bos ? '' : nameOf(val);
+  const mesaj = `${uygun.length} iş ${bos ? 'atamasız bırakılacak' : ad + ' adlı boostçuya atanacak'}.`
+    + (atlanan ? ` ${atlanan} dış kaynak işi atlanıyor.` : '') + ' Devam?';
+  if(!confirm(mesaj)) return;
+  // Atama yapilirken 'yeni' durumdaki isler 'atandi'ya geciyor: bot 'yeni'
+  // siparisleri yoklamiyor, atanmis ama 'yeni' kalan is sessizce takipsiz olurdu.
+  const yeniler = uygun.filter(r => r.durum === 'yeni').map(r => r.id);
+  const otekiler = uygun.filter(r => r.durum !== 'yeni').map(r => r.id);
+  const alan = { booster_id: bos ? null : val };
+  if(otekiler.length) bulkPatch(otekiler, alan, 'Booster atama');
+  if(yeniler.length)  bulkPatch(yeniler, bos ? alan : { ...alan, durum:'atandi' }, 'Booster atama');
+}
+
 function bulkArchive(v){
   const ids = [...ordersView.sel];
   if(confirm(`${ids.length} iş arşivlenecek. Devam?`)) bulkPatch(ids, { archived: v }, 'Arşivleme');
@@ -695,38 +851,68 @@ function renderCards(list){
 
 function renderTable(list){
   const admin = isAdmin();
+  /* Sutun basliklari siralanabilir. Aktif sutunun oku yonu gosteriyor;
+     aria-sort ekran okuyucuya da soyluyor. */
+  const th = (k, sinif) => {
+    const s = SORTS[k];
+    const aktif = ordersView.sort === k;
+    const yon = aktif ? (ordersView.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+    return `<th class="${sinif || ''}${aktif ? ' sorted' : ''}" aria-sort="${yon}">
+      <button class="th-b" onclick="setSort('${esc(k)}')">${esc(s.etiket)}
+        <span class="th-ok">${aktif ? (ordersView.dir === 'asc' ? '↑' : '↓') : '↕'}</span></button></th>`;
+  };
   const bas = `<tr>
     <th class="c-sel"><input type="checkbox" class="sel" onclick="selAll(this.checked)"
         ${list.length && ordersView.sel.size===list.length?'checked':''}></th>
-    <th>İş</th><th class="c-game">Oyun</th><th class="c-st">Durum</th>
-    ${admin?'<th class="c-b">Booster</th>':''}
-    <th class="c-track">İlerleme</th>
-    ${admin?'<th class="r c-m">Net Gelir</th><th class="r c-m">Kâr</th>':'<th class="r c-m">Kazancın</th>'}
+    ${th('is')}${th('oyun','c-game')}${th('durum','c-st')}
+    ${admin?th('booster','c-b'):''}
+    ${th('ilerleme','c-track')}${th('due','c-due')}
+    ${admin?th('net','r c-m')+th('kar','r c-m'):th('ucret','r c-m')}
     <th class="c-act"></th></tr>`;
+
   const satir = r => {
-    const net = netGelirTLof(r.id), kar = net - r.payout;
+    const net = netGelirTLof(r.id), kar = net - r.payout - disMaliyetTL(r);
     const para = admin
       ? (hasFin(r.id)
-          ? `<td class="r c-m">${fmt(net,'TRY')}</td><td class="r c-m kar">${fmt(kar,'TRY')}</td>`
-          : `<td class="r c-m dim">—</td><td class="r c-m dim">—</td>`)
-      : `<td class="r c-m">${fmt(r.payout,'TRY')}</td>`;
+          ? `<td class="r c-m" data-l="Net gelir">${fmt(net,'TRY')}</td>
+             <td class="r c-m" data-l="Kâr"><b class="${kar<0?'neg':'pos'}">${fmt(kar,'TRY')}</b></td>`
+          : `<td class="r c-m dim" data-l="Net gelir">—</td><td class="r c-m dim" data-l="Kâr">—</td>`)
+      : `<td class="r c-m" data-l="Kazancın">${fmt(r.payout,'TRY')}</td>`;
+    const t = teslim(r);
     return `<tr data-selrow="${esc(r.id)}" class="${ordersView.sel.has(r.id)?'picked':''}${r.archived?' arch':''}${isGec(r)?' gec':''}">
       <td class="c-sel">${selBox(r)}</td>
-      <td class="o-job" onclick="openDetail('${r.id}')">
+      <td class="o-job" onclick="openDetail('${esc(r.id)}')">
         <div class="o-route">${routeHTML(r)}</div>
-        <div class="o-sub">${esc(r.tarih||'')}${r.riotId?' · '+esc(r.riotId):''}${
-          (teslim(r)||{}).gec?` · <span class="gec">${esc(teslim(r).metin)}</span>`:''}</div></td>
-      <td class="c-game"><span class="chip game">${esc(gameOf(r.game).short)}</span></td>
-      <td class="c-st"><span class="status ${esc(r.durum)}">${esc(STATUS_LABEL[r.durum]||r.durum)}</span></td>
-      ${admin?`<td class="c-b">${isDis(r)?`<span class="chip dis">🏷 ${esc(r.vendor)}</span>`
+        <div class="o-sub">${esc(r.tarih||'')}${r.riotId?' · '+esc(r.riotId):''}</div></td>
+      <td class="c-game" data-l="Oyun"><span class="chip game">${esc(gameOf(r.game).short)}</span></td>
+      <td class="c-st" data-l="Durum">${statusCell(r)}</td>
+      ${admin?`<td class="c-b" data-l="Booster">${isDis(r)?`<span class="chip dis">🏷 ${esc(r.vendor)}</span>`
         :r.boosterId?esc(nameOf(r.boosterId)):'<span class="dim">atanmadı</span>'}</td>`:''}
-      <td class="c-track">${ilerlemeHTML(r)}</td>
+      <td class="c-track" data-l="İlerleme">${ilerlemeHTML(r)}</td>
+      <td class="c-due" data-l="Teslim">${t ? `<span class="${t.gec?'gec':'dim'}">${esc(t.metin)}</span>`
+                            : '<span class="dim">—</span>'}</td>
       ${para}
-      <td class="c-act">${nextBtn(r)}<button class="icon-btn" onclick="openDetail('${r.id}')">🔍</button></td>
+      <td class="c-act"><button class="icon-btn" onclick="openDetail('${esc(r.id)}')">🔍</button></td>
     </tr>`;
   };
   return `<div class="table-scroll"><table class="otable">
     <thead>${bas}</thead><tbody>${list.map(satir).join('')}</tbody></table></div>`;
+}
+
+/* Satir ici durum degisimi. "Tek tek tiklama yavas" sikayetinin tablo
+   tarafindaki cevabi: durumu degistirmek icin drawer acmak ya da forma gitmek
+   gerekmiyor, hucredeki secim yetiyor.
+
+   Akisi bitmis durumlar (odendi gibi) formda secilemiyor ama VERIDE var;
+   secenek listesine mevcut durumu her zaman ekliyoruz, yoksa select bos
+   gorunur ve ilk tiklamada isi baska bir duruma kaydirirdi. */
+function statusCell(r){
+  if(r.archived) return `<span class="status ${esc(r.durum)}">${esc(STATUS_LABEL[r.durum]||r.durum)}</span>`;
+  const secenekler = FORM_STATUSES.includes(r.durum) ? FORM_STATUSES : [...FORM_STATUSES, r.durum];
+  return `<select class="st-sel ${esc(r.durum)}" onclick="event.stopPropagation()"
+      onchange="setStatus('${esc(r.id)}',this.value)">
+    ${secenekler.map(k => `<option value="${esc(k)}" ${k===r.durum?'selected':''}>${esc(STATUS_LABEL[k]||k)}</option>`).join('')}
+  </select>`;
 }
 
 /* Pano: sürükle-bırak yerine kart üstündeki "→" butonu. Düz JS'te HTML5 DnD
@@ -866,7 +1052,7 @@ function render(){
   renderSrcTabs();
   renderViewSwitch();
 
-  const list = filterRecords();
+  const list = sortRecords(filterRecords());
   pruneSelection(list);
   renderBulkBar();
 

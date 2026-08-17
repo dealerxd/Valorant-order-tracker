@@ -23,15 +23,19 @@ async function loadAll(){
   if(!me) return;
   const benimSira = ++loadSeq;
   setSync('','● yükleniyor…');
-  const [rRes,pRes,fRes,iRes,tRes]=await Promise.all([
+  const [rRes,pRes,fRes,iRes,tRes,xRes]=await Promise.all([
     sb.from(TABLES.orders).select('*').order('created_at',{ascending:false}),
-    sb.from('profiles').select('*').order('display_name'),
-    isAdmin()?sb.from('order_finance').select('*'):Promise.resolve({data:[]}),
+    sb.from(TABLES.profiles).select('*').order('display_name'),
+    isAdmin()?sb.from(TABLES.finance).select('*'):Promise.resolve({data:[]}),
     isAdmin()?sb.from('invites').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]}),
     // Takip durumu: sipariş başına tek satır, listedeki ilerleme rozetleri buradan.
     // Maçlar burada çekilmiyor — sipariş başına yüzlerce satır olabiliyor,
     // detail.js drawer açılınca ayrıca alıyor.
-    sb.from(TABLES.state).select('*')
+    sb.from(TABLES.state).select('*'),
+    // Guncel kur. Tracker gunde bir yaziyor (tracker/fx.py); panel formu
+    // bundan doldurup siparis aninda order_finance.rate'e sabitliyor.
+    // Yalnizca son iki satir: para birimi basina en yenisi yetiyor.
+    sb.from(TABLES.fx).select('*').order('as_of',{ascending:false}).limit(12)
   ]);
   if(benimSira !== loadSeq) return;        // daha yenisi baslamis, bunu yazma
   if(rRes.error){ setSync('err','● hata'); alert('Veri çekilemedi: '+rRes.error.message); return; }
@@ -45,6 +49,12 @@ async function loadAll(){
     platform:f.platform||'', platformRef:f.platform_ref||'',
     cost:Number(f.cost)||0, costCur:f.cost_currency||'USD', feePct:Number(f.fee_pct)||0,
     costTL:Number(f.cost_tl)||0, rate:Number(f.rate)||0 });
+  // Para birimi basina EN YENI satir. Kur cekilemediyse tablo bos kalir ve
+  // form kur alanini bos birakir - uydurma kur yazmaktansa elle girilsin.
+  fx = {}; (xRes.data||[]).forEach(x => {
+    if(!fx[x.currency] || x.as_of > fx[x.currency].as_of)
+      fx[x.currency] = { rate:Number(x.rate)||0, as_of:x.as_of, source:x.source||'' };
+  });
   setSync('ok','● bağlı · canlı');
   fillBoosterSelects(); render();
   if(isAdmin()){ renderBoosters(); renderInvites(); renderArchive(); }

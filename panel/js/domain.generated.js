@@ -5,7 +5,7 @@
    ============================================================ */
 
 /* Tablo isimleri (tracker ayni dosyadan okuyor) */
-const TABLES = {"orders": "resells", "state": "tracker_state", "matches": "tracker_matches"};
+const TABLES = {"orders": "resells", "state": "tracker_state", "matches": "tracker_matches", "finance": "order_finance", "profiles": "profiles", "fx": "fx_rates", "comments": "resell_comments"};
 
 /* ---- Oyunlar ---- */
 /* tracked=false olanlarin takip botu yok; panel yine de siparis, fiyat

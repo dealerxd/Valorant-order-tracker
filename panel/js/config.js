@@ -44,6 +44,8 @@ let STEP_PRICE = {}, RANK_VALUE = {}, NET_WIN_PRICE = {}, SETTINGS = {price_mult
 
 /* Uygulama durumu */
 let me=null, currentGame=DEFAULT_GAME, records=[], finance={}, tracker={}, people=[], invites=[], formImage=null, editId=null;
+/* Guncel doviz kuru: { USD:{rate,as_of,source}, ... }. Tracker gunde bir yaziyor. */
+let fx = {};
 const isAdmin=()=> me && me.role==='admin';
 
 /* Yardımcılar */

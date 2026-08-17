@@ -60,7 +60,47 @@ function boosterOzeti(p){
   };
 }
 
+/* İş yükü özeti: atama yaparken bakılacak tek satır. "Kim müsait" sorusunu
+   kartları tek tek okumadan cevaplıyor; sıralama da doluluğa göre, yani
+   listenin başı her zaman iş alabilecek kişi. */
+function renderWorkload(){
+  const el = document.getElementById('workload'); if(!el) return;
+  const bst = people.filter(p => p.role === 'booster');
+  if(!bst.length){ el.innerHTML = ''; return; }
+
+  const satirlar = bst.map(p => ({ p, o:boosterOzeti(p) }))
+    // Once musait olanlar, sonra doluluk oranina gore. Pasifler en sonda.
+    .sort((a, b) => (a.p.active ? 0 : 1) - (b.p.active ? 0 : 1)
+      || (a.o.kap ? a.o.acik / a.o.kap : a.o.acik) - (b.o.kap ? b.o.acik / b.o.kap : b.o.acik));
+
+  const toplamAcik = satirlar.reduce((a, x) => a + x.o.acik, 0);
+  const toplamKap  = satirlar.reduce((a, x) => a + (x.o.kap || 0), 0);
+  const gecen      = satirlar.reduce((a, x) => a + x.o.gecen, 0);
+  const musait     = satirlar.filter(x => x.p.active && (!x.o.kap || x.o.acik < x.o.kap)).length;
+
+  el.innerHTML = `<div class="ov-card"><div class="ov-h">İş yükü
+      <span class="ov-n">${musait} kişi iş alabilir</span></div>
+    <div class="wl-top">
+      <span>toplam açık iş <b>${toplamAcik}</b>${toplamKap ? ` / ${toplamKap} kapasite` : ''}</span>
+      ${gecen ? `<span class="wl-gec">${gecen} geciken iş</span>` : ''}
+    </div>
+    <div class="wl">${satirlar.map(({ p, o }) => `
+      <button class="wl-row" onclick="setOrdersFilter({booster:'${esc(p.id)}',durum:'acik',archive:'active'})"
+              title="Bu boostçunun açık işlerini göster">
+        <span class="wl-ad">${esc(p.display_name)}
+          ${p.active ? '' : '<span class="dim"> · pasif</span>'}</span>
+        <span class="wl-bar"><span class="${o.dolu ? 'full' : ''}"
+          style="width:${o.kap ? Math.min(100, Math.round(o.acik / o.kap * 100)) : (o.acik ? 100 : 0)}%"></span></span>
+        <span class="wl-n">${o.acik}${o.kap ? '/' + o.kap : ''}</span>
+        <span class="wl-x ${o.gecen ? 'red' : 'dim'}">${o.gecen ? o.gecen + ' geç' : '—'}</span>
+        <span class="wl-p ${o.borc ? 'red' : 'dim'}">${o.borc ? fmt(o.borc,'TRY') : '—'}</span>
+      </button>`).join('')}</div>
+    <div class="ov-note">Satıra tıklamak o kişinin açık işlerini listeler.
+      Kapasite girilmemiş kişilerde çubuk yalnızca "işi var / yok" gösterir.</div></div>`;
+}
+
 function renderBoosters(){
+  renderWorkload();
   const el = document.getElementById('boosterList');
   el.innerHTML = `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Kayıtlı kişiler</div>`
     + people.map(p => {

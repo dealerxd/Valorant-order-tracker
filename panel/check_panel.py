@@ -246,8 +246,15 @@ with sync_playwright() as p:
     page.evaluate("me={id:'u1',role:'admin',display_name:'Rex'}; buildTabs(); renderMeCard();")
     admin_nav = page.eval_on_selector_all("#tabBar .nav-item", "els => els.map(e => e.dataset.tab)")
     check("admin navigasyonu tam",
-          admin_nav == ["genel","siparis","rapor","odeme","arsiv","boosterlar","hesap","fiyat","profil"],
+          admin_nav == ["genel","siparis","arsiv","odeme","rapor","hesap","fiyat","boosterlar","profil"],
           str(admin_nav))
+    # Nav gruplu: dokuz duz satir taranamiyordu.
+    check("nav uc grupta",
+          page.eval_on_selector_all("#tabBar .nav-group", "e => e.length") == 3)
+    check("grup basliklari",
+          page.eval_on_selector_all("#tabBar .nav-group-h", "e => e.map(x => x.textContent.trim())")
+          == ["İŞLER", "PARA", "EKİP"],
+          str(page.eval_on_selector_all("#tabBar .nav-group-h", "e => e.map(x => x.textContent.trim())")))
     check("admin avatari", page.eval_on_selector("#meInitial", "e => e.textContent") == "R")
 
     page.evaluate("me={id:'u2',role:'booster',display_name:'ali'}; buildTabs(); renderMeCard();")
@@ -277,7 +284,8 @@ with sync_playwright() as p:
     # --- Sahte veriyle tam senaryo ---------------------------------------
     page.evaluate("""
       me = { id:'admin1', role:'admin', display_name:'Rex' };
-      people = [{id:'b1',display_name:'Ali',role:'booster',active:true},
+      people = [{id:'admin1',display_name:'Rex',role:'admin',active:true},
+                {id:'b1',display_name:'Ali',role:'booster',active:true},
                 {id:'b2',display_name:'Veli',role:'booster',active:true}];
       const mk = (id,o) => Object.assign({
         id, game:'valorant', orderType:'rank', baslangic:'Gold 1', hedef:'Plat 1',
@@ -1041,6 +1049,297 @@ with sync_playwright() as p:
     check("gorsel olmayan dosya reddediliyor",
           "görsel" in page.evaluate("window.__toast"), page.evaluate("window.__toast"))
     page.evaluate("toast = window.__realToast;")
+
+    # --- Sıralama ---------------------------------------------------------
+    # Asil aci: cok siparis olunca liste taranamiyor. Cevap tablo + siralama.
+    check("varsayilan gorunum tablo",
+          page.evaluate("lsGet('ordersMode','tablo')") in ("tablo", "kart", "pano"))
+    page.evaluate("""
+      me = { id:'admin1', role:'admin', display_name:'Rex' };
+      const g = n => new Date(Date.now() + n*86400000).toISOString().slice(0,10);
+      records = [
+        {id:'S1',game:'valorant',orderType:'rank',baslangic:'Gold 1',hedef:'Plat 1',winCount:0,jobDesc:'',
+         startRR:0,region:'TR',riotId:'',extras:[],extraWin:false,durum:'devam',tarih:'2026-08-10',
+         dueAt:g(5),not:'',image:null,boosterId:'b1',payout:100,paid:false,archived:false,
+         created:'2026-08-10T10:00:00',vendor:'',vendorCost:0,vendorCur:'USD',vendorPaid:false},
+        {id:'S2',game:'valorant',orderType:'rank',baslangic:'Bronze 1',hedef:'Silver 1',winCount:0,jobDesc:'',
+         startRR:0,region:'TR',riotId:'',extras:[],extraWin:false,durum:'yeni',tarih:'2026-08-12',
+         dueAt:g(1),not:'',image:null,boosterId:null,payout:300,paid:false,archived:false,
+         created:'2026-08-12T10:00:00',vendor:'',vendorCost:0,vendorCur:'USD',vendorPaid:false},
+        {id:'S3',game:'rl',orderType:'rank',baslangic:'Gold I',hedef:'Platinum I',winCount:0,jobDesc:'',
+         startRR:0,region:'TR',riotId:'',extras:[],extraWin:false,durum:'atandi',tarih:'2026-08-11',
+         dueAt:'',not:'',image:null,boosterId:null,payout:200,paid:false,archived:false,
+         created:'2026-08-11T10:00:00',vendor:'Mert',vendorCost:20,vendorCur:'USD',vendorPaid:false}
+      ];
+      finance = {}; tracker = {};
+      people = [{id:'admin1',display_name:'Rex',role:'admin',active:true},
+                {id:'b1',display_name:'Ali',role:'booster',active:true},
+                {id:'b2',display_name:'Veli',role:'booster',active:true}];
+      gameScope=''; ordersView.durum=''; ordersView.src=''; ordersView.sel.clear();
+      setOrdersView('tablo'); switchTab('siparis');
+      ordersView.sort='due'; ordersView.dir='asc'; render();
+    """)
+    page.wait_for_timeout(150)
+    check("teslim tarihine gore siralandi",
+          page.evaluate("sortRecords(filterRecords()).map(r => r.id).join(',')") == "S2,S1,S3",
+          page.evaluate("sortRecords(filterRecords()).map(r => r.id).join(',')"))
+    # Tarihi girilmemis is (S3) YONDEN BAGIMSIZ olarak sonda kalmali; yoksa
+    # "en yakin teslim" listesinin basini suresiz isler kaplar.
+    page.evaluate("setSort('due')")   # yonu cevirir
+    check("yon cevrildi", page.evaluate("ordersView.dir") == "desc")
+    check("bos teslim tarihi ters yonde de sonda",
+          page.evaluate("sortRecords(filterRecords()).map(r => r.id).join(',')") == "S1,S2,S3",
+          page.evaluate("sortRecords(filterRecords()).map(r => r.id).join(',')"))
+    page.evaluate("ordersView.sort='ucret'; ordersView.dir='desc'; render();")
+    check("ucrete gore siralandi",
+          page.evaluate("sortRecords(filterRecords()).map(r => r.payout).join(',')") == "300,200,100")
+    page.evaluate("ordersView.sort='is'; ordersView.dir='asc'; render();")
+    check("metin siralamasi turkce",
+          page.evaluate("sortRecords(filterRecords())[0].id") == "S2",
+          page.evaluate("sortRecords(filterRecords()).map(r=>r.id).join(',')"))
+    # Yeni sutuna gecince yon o sutunun dogal yonuyle basliyor.
+    page.evaluate("setSort('kar')")
+    check("para sutunu azalan basliyor", page.evaluate("ordersView.dir") == "desc")
+    page.evaluate("setSort('tarih')")
+    check("tarih sutunu artan basliyor", page.evaluate("ordersView.dir") == "asc")
+    page.evaluate("ordersView.sort='due'; ordersView.dir='asc'; render();")
+    page.wait_for_timeout(120)
+    check("tablo basliklari siralanabilir",
+          page.eval_on_selector_all(".otable th .th-b", "e => e.length") >= 7,
+          str(page.eval_on_selector_all(".otable th .th-b", "e => e.length")))
+    check("aktif sutun isaretli",
+          page.eval_on_selector_all(".otable th.sorted", "e => e.length") == 1)
+    check("aria-sort yaziliyor",
+          page.eval_on_selector(".otable th.sorted", "e => e.getAttribute('aria-sort')") == "ascending")
+
+    # --- Satır içi durum --------------------------------------------------
+    check("durum hucresi secim kutusu",
+          page.eval_on_selector_all(".otable tbody .st-sel", "e => e.length") == 3)
+    # Formda secilemeyen ama veride bulunan durum secenek listesinden dusmemeli;
+    # duserdi ve ilk tiklamada is baska bir duruma kayardi.
+    page.evaluate("records.find(r => r.id==='S1').durum='odendi'; render();")
+    check("veride olan ama formda olmayan durum secenekte",
+          page.eval_on_selector_all("[data-selrow='S1'] .st-sel option",
+                                    "e => e.map(x => x.value)").count("odendi") == 1,
+          str(page.eval_on_selector_all("[data-selrow='S1'] .st-sel option", "e => e.map(x=>x.value)")))
+    check("mevcut durum secili",
+          page.eval_on_selector("[data-selrow='S1'] .st-sel", "e => e.value") == "odendi")
+    page.evaluate("records.find(r => r.id==='S1').durum='devam'; render();")
+
+    # --- Toplu booster atama ----------------------------------------------
+    page.evaluate("""
+      window.__patch = []; window.__realPatch = bulkPatch;
+      bulkPatch = (ids, alan) => { window.__patch.push([ids.slice().sort(), alan]); };
+      window.__realConfirm = window.confirm; window.confirm = () => true;
+      selAll(true); bulkAssign('b2');
+    """)
+    yazim = page.evaluate("JSON.stringify(window.__patch)")
+    # Dis kaynak isi (S3) ATLANMALI: ucreti saticiya odeniyor, booster atamak
+    # borcu iki kere yazardi. 'yeni' olan S2 ayni anda 'atandi'ya gecmeli,
+    # yoksa bot onu hic yoklamaz.
+    check("dis kaynak isi atlandi", "S3" not in yazim, yazim)
+    check("yeni is atanirken durumu da ilerledi",
+          '"durum":"atandi"' in yazim and '"S2"' in yazim, yazim)
+    check("devam eden isin durumuna dokunulmadi",
+          any(p[0] == ["S1"] and "durum" not in p[1] for p in page.evaluate("window.__patch")),
+          yazim)
+    page.evaluate("window.__patch=[]; bulkAssign('__bos');")
+    check("atamayi kaldirma bos yaziyor",
+          '"booster_id":null' in page.evaluate("JSON.stringify(window.__patch)"))
+    page.evaluate("bulkPatch = window.__realPatch; window.confirm = window.__realConfirm; selAll(false);")
+
+    # --- Otomatik kur -----------------------------------------------------
+    bugun = page.evaluate("new Date().toISOString().slice(0,10)")
+    page.evaluate("""(g) => {
+      fx = { USD:{rate:41.25, as_of:g, source:'frankfurter'} };
+      newOrder();
+      document.getElementById('currency').value='USD';
+      onMoneyChange();
+    }""", bugun)
+    check("kur otomatik dolduruldu",
+          page.eval_on_selector("#rate", "e => e.value") == "41.25",
+          page.eval_on_selector("#rate", "e => e.value"))
+    check("kaynagi ekranda yaziyor",
+          "otomatik" in page.eval_on_selector("#rateNote", "e => e.textContent"))
+    # Elle degistirilen kur bir daha EZILMEMELI: pazaryeri kendi kurunu uygular.
+    page.evaluate("""
+      const el = document.getElementById('rate');
+      el.value = '38'; onRateInput(); onMoneyChange();
+    """)
+    check("elle girilen kur ezilmiyor",
+          page.eval_on_selector("#rate", "e => e.value") == "38")
+    check("elle girilince guncel kur teklif ediliyor",
+          "kullan" in page.eval_on_selector("#rateNote", "e => e.textContent"))
+    # Bayat kur SESSIZCE kullanilmamali.
+    page.evaluate("""
+      fx = { USD:{rate:30, as_of:'2020-01-01', source:'x'} };
+      newOrder(); document.getElementById('currency').value='USD'; onMoneyChange();
+    """)
+    check("bayat kur uyariyla geliyor",
+          "günlük" in page.eval_on_selector("#rateNote", "e => e.textContent"),
+          page.eval_on_selector("#rateNote", "e => e.textContent"))
+    # Kur hic yoksa uydurulmamali.
+    page.evaluate("fx = {}; newOrder(); document.getElementById('currency').value='USD'; onMoneyChange();")
+    check("kur yoksa alan bos kaliyor",
+          page.eval_on_selector("#rate", "e => e.value") == "")
+    check("kur yoksa ekranda soyleniyor",
+          "elle gir" in page.eval_on_selector("#rateNote", "e => e.textContent"))
+    # Duzenlemede KAYITLI kur korunmali: siparis anindaki kur sabit, bugunun
+    # kuruyla ezilirse gecmis kar hesabi degisir.
+    page.evaluate("""(g) => {
+      fx = { USD:{rate:41.25, as_of:g, source:'x'} };
+      finance = { S1:{platform:'E',cost:25,costCur:'USD',feePct:0,costTL:750,rate:30} };
+      hideForm(); editRecord('S1'); onMoneyChange();
+    }""", bugun)
+    check("duzenlemede kayitli kur korunuyor",
+          page.eval_on_selector("#rate", "e => e.value") == "30",
+          page.eval_on_selector("#rate", "e => e.value"))
+    page.evaluate("resetForm(); finance = {}; render();")
+
+    # --- Ödeme dönemi -----------------------------------------------------
+    page.evaluate("""
+      records[0].durum='tamam'; records[0].paid=false; records[0].payout=100;
+      records[0].boosterId='b1'; records[0].tarih='2026-08-10';
+      records[1].durum='tamam'; records[1].paid=false; records[1].payout=300;
+      records[1].boosterId='b1'; records[1].tarih='2020-01-05';
+      setOdemeDonem('hepsi'); switchTab('odeme');
+    """)
+    page.wait_for_timeout(150)
+    check("donem 'tumu' iken hepsi geliyor",
+          page.evaluate("odemeBoosterGruplari()[0].isler.length") == 2)
+    page.evaluate("setOdemeDonem('ay')"); page.wait_for_timeout(120)
+    check("bu ay donemi eskiyi eliyor",
+          page.evaluate("odemeBoosterGruplari()[0].isler.map(r=>r.id).join(',')") == "S1",
+          page.evaluate("JSON.stringify(odemeBoosterGruplari().map(g=>g.isler.map(r=>r.id)))"))
+    check("donem secici cizildi",
+          page.eval_on_selector_all(".pay-donem .gs", "e => e.length") == 4)
+    check("KPI de donemle daraliyor",
+          page.evaluate("paraOzeti(activeRecs().filter(donemde)).borc") == 100,
+          str(page.evaluate("paraOzeti(activeRecs().filter(donemde)).borc")))
+    # Toplu ödeme: seçilenlerin hepsi tek turda.
+    page.evaluate("""
+      window.__patch = []; window.__realPatch = bulkPatch;
+      bulkPatch = async (ids, alan) => { window.__patch.push([ids.slice().sort(), alan]); };
+      window.__realConfirm = window.confirm; window.confirm = () => true;
+      odemeSecim.clear(); odemeSec('b:b1', true);
+    """)
+    page.wait_for_timeout(120)
+    page.evaluate("odeSecilenler()")
+    page.wait_for_timeout(150)
+    check("secilenler tek turda odendi isaretlendi",
+          page.evaluate("JSON.stringify(window.__patch)") == '[[["S1"],{"paid":true}]]',
+          page.evaluate("JSON.stringify(window.__patch)"))
+    page.evaluate("""
+      bulkPatch = window.__realPatch; window.confirm = window.__realConfirm;
+      setOdemeDonem('hepsi'); odemeSecim.clear();
+    """)
+
+    # --- İş yükü paneli ---------------------------------------------------
+    page.evaluate("""
+      people.find(p => p.id === 'b1').capacity = 1;
+      people.find(p => p.id === 'b2').capacity = 3;
+      records[0].durum='devam'; records[0].boosterId='b1';
+      records[1].durum='devam'; records[1].boosterId='b1';
+      switchTab('boosterlar');
+    """)
+    page.wait_for_timeout(150)
+    check("is yuku paneli cizildi",
+          page.eval_on_selector_all("#workload .wl-row", "e => e.length") == 2)
+    # Musait olan basta: liste atama icin okunuyor.
+    check("musait olan listenin basinda",
+          page.eval_on_selector("#workload .wl-row .wl-ad", "e => e.textContent.trim()").startswith("Veli"),
+          page.eval_on_selector_all("#workload .wl-ad", "e => e.map(x=>x.textContent.trim())")[0])
+    check("dolu olan kirmizi",
+          page.eval_on_selector_all("#workload .wl-bar span.full", "e => e.length") == 1)
+    check("kac kisi is alabilir yaziyor",
+          "1 kişi iş alabilir" in page.eval_on_selector("#workload .ov-h", "e => e.textContent"),
+          page.eval_on_selector("#workload .ov-h", "e => e.textContent").strip())
+    # Pasif kisi listenin sonunda: ona is atanmaz.
+    page.evaluate("people.find(p => p.id === 'b2').active = false; renderWorkload();")
+    check("pasif kisi sona atildi",
+          page.eval_on_selector_all("#workload .wl-ad", "e => e.map(x=>x.textContent.trim())")[-1].startswith("Veli"))
+    page.evaluate("people.find(p => p.id === 'b2').active = true;")
+
+    # --- Yorumlar ---------------------------------------------------------
+    page.evaluate("""
+      switchTab('siparis'); openDetail('S1');
+    """)
+    page.wait_for_timeout(220)
+    page.evaluate("""
+      drawerComments = { rows:[
+        {id:'c1', author_id:'admin1', body:'Musteri aksam 9 sonrasi oynansin dedi.',
+         created_at:new Date(Date.now()-3600000).toISOString()},
+        {id:'c2', author_id:'b1', body:'Bugün 3 maç yaptım.',
+         created_at:new Date(Date.now()-7200000).toISOString()}
+      ], error:null };
+      renderDetail();
+    """)
+    page.wait_for_timeout(120)
+    check("yorumlar cizildi", page.eval_on_selector_all(".cmt", "e => e.length") == 2)
+    # Silme yalnizca KENDI yorumunda: baskasininkini silme dugmesi hic cizilmemeli.
+    check("yalnizca kendi yorumunda sil dugmesi",
+          page.eval_on_selector_all(".cmt-del", "e => e.length") == 1)
+    check("yorum yazani gosteriyor",
+          "Rex" in page.eval_on_selector(".cmt", "e => e.textContent"),
+          page.eval_on_selector(".cmt", "e => e.textContent").strip()[:80])
+    # Yorum kutusundaki metin HTML olarak yorumlanmamali.
+    page.evaluate("p => { drawerComments.rows[0].body = p; renderDetail(); }",
+                  '<img src=x onerror="window.__cx=1">')
+    page.wait_for_timeout(120)
+    check("yorumda HTML enjeksiyonu yok", page.evaluate("window.__cx === undefined"))
+    page.evaluate("closeDetail(); drawerComments = { rows:null, error:null };")
+
+    # --- Dar ekranda tablo ------------------------------------------------
+    # Yatay kaydirma telefonda sutunlarin yarisini gizliyor; satirlar kart
+    # yigina donusuyor ve hucre etiketleri data-l'den geliyor.
+    page.set_viewport_size({"width": 390, "height": 860})
+    # Bu blok GEOMETRI olcuyor: kabuk gercekten gorunur olmali. Testin geri
+    # kalani giris ekrani acikken calisiyor ve eleman SAYIYOR; olculen kutu
+    # sifir olsaydi kontroller sessizce gecerdi (bu hata bir kez yasandi).
+    page.evaluate("""
+      document.getElementById('app').classList.remove('hidden');
+      document.getElementById('authScreen')?.classList.add('hidden');
+      switchTab('siparis'); setOrdersView('tablo'); render();
+    """)
+    page.wait_for_timeout(200)
+    check("olcum icin kabuk gercekten gorunur",
+          page.eval_on_selector(".otable tbody tr", "e => e.getBoundingClientRect().height") > 0)
+    check("dar ekranda tablo basligi gizli",
+          page.eval_on_selector(".otable thead", "e => getComputedStyle(e).display") == "none")
+    check("dar ekranda satir blok",
+          page.eval_on_selector(".otable tbody tr", "e => getComputedStyle(e).display") == "block")
+    check("hucre etiketleri gorunuyor",
+          page.evaluate("getComputedStyle(document.querySelector('.otable tbody .c-st'),'::before').content")
+          .strip('"') == "Durum",
+          page.evaluate("getComputedStyle(document.querySelector('.otable tbody .c-st'),'::before').content"))
+    check("dar ekranda yatay tasma yok",
+          not page.evaluate("document.documentElement.scrollWidth > innerWidth"))
+    check("dar ekranda secim kutusu erisilebilir",
+          page.evaluate("""(() => {
+            const e = document.querySelector('.otable tbody .c-sel input');
+            const r = e.getBoundingClientRect();
+            return r.width > 0 && r.left >= 0 && r.right <= innerWidth;
+          })()"""),
+          page.evaluate("""(() => {
+            const e = document.querySelector('.otable tbody .c-sel input');
+            if(!e) return 'input yok';
+            const r = e.getBoundingClientRect();
+            return JSON.stringify({l:Math.round(r.left), w:Math.round(r.width), vw:innerWidth});
+          })()"""))
+    check("dar ekranda is metni butonlarla cakismiyor",
+          page.evaluate("""(() => {
+            const j = document.querySelector('.otable tbody .o-job');
+            const s = document.querySelector('.otable tbody .c-sel input');
+            const yazi = j.getBoundingClientRect().right - parseFloat(getComputedStyle(j).paddingRight);
+            return yazi <= s.getBoundingClientRect().left;
+          })()"""))
+    # Nav gruplari dar ekranda tek satira duzlesiyor.
+    check("dar ekranda grup basliklari gizli",
+          page.eval_on_selector(".nav-group-h", "e => getComputedStyle(e).display") == "none")
+    check("dar ekranda nav tek satir",
+          page.eval_on_selector(".nav-group", "e => getComputedStyle(e).display") == "contents")
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.evaluate("document.getElementById('app').classList.add('hidden');")
 
     browser.close()
 

@@ -5,13 +5,19 @@ let currentTab = 'genel';
 /* Nav tanımı role göre değişiyor. Booster finans, arşiv ve booster yönetimini
    görmez — bu ayrım yalnızca burada değil, veri katmanında da var (data.js
    booster için order_finance ve invites'ı hiç sorgulamıyor). */
+/* Navigasyon gruplu: dokuz duz satir taranamiyordu, "Rapor mu Odemeler mi"
+   sorusu her seferinde ayni bakisi gerektiriyordu. Uc baslik altinda toplandi.
+
+   Booster'da tek grup var; baslik koymuyoruz - tek gruplu bir baslik gurultu. */
 function navDef(){
   return isAdmin()
-    ? [['genel','Genel Bakış','◱'], ['siparis','Siparişler','▤'], ['rapor','Rapor','◆'],
-       ['odeme','Ödemeler','₺'], ['arsiv','Arşiv','▨'], ['boosterlar','Boosterlar','◇'], ['hesap','Hesaplayıcı','∑'],
-       ['fiyat','Fiyat Listesi','≡'], ['profil','Profilim','◉']]
-    : [['siparis','İşlerim','▤'], ['fiyat','Fiyat Listesi','≡'], ['profil','Profilim','◉']];
+    ? [['İŞLER', [['genel','Genel Bakış','◱'], ['siparis','Siparişler','▤'], ['arsiv','Arşiv','▨']]],
+       ['PARA',  [['odeme','Ödemeler','₺'], ['rapor','Rapor','◆'], ['hesap','Hesaplayıcı','∑'], ['fiyat','Fiyat Listesi','≡']]],
+       ['EKİP',  [['boosterlar','Boosterlar','◇'], ['profil','Profilim','◉']]]]
+    : [['', [['siparis','İşlerim','▤'], ['fiyat','Fiyat Listesi','≡'], ['profil','Profilim','◉']]]];
 }
+/* Duz liste: "bu sekme bu rolde var mi" sorusu icin. */
+const navFlat = () => navDef().flatMap(([, ogeler]) => ogeler);
 
 const TAB_IDS = ['genel','siparis','odeme','rapor','arsiv','boosterlar','hesap','fiyat','profil'];
 
@@ -28,14 +34,19 @@ const PAGE_META = {
 };
 
 function buildTabs(){
-  const def = navDef();
+  const gruplar = navDef();
+  const hepsi = navFlat();
   // Rol değiştiyse ya da varsayılan sekme bu rolde yoksa ilkine düş.
-  if(!def.some(n => n[0] === currentTab)) currentTab = def[0][0];
-  document.getElementById('tabBar').innerHTML = def.map(([k,l,i]) =>
-    `<button class="nav-item${k===currentTab?' active':''}" data-tab="${k}" onclick="switchTab('${k}')">
-       <span class="nav-ico">${i}</span><span class="nav-label">${l}</span>
-       <span class="nav-badge" data-badge="${k}"></span>
-     </button>`).join('');
+  if(!hepsi.some(n => n[0] === currentTab)) currentTab = hepsi[0][0];
+  document.getElementById('tabBar').innerHTML = gruplar.map(([baslik, ogeler]) =>
+    `<div class="nav-group">
+       ${baslik ? `<div class="nav-group-h">${esc(baslik)}</div>` : ''}
+       ${ogeler.map(([k,l,i]) =>
+         `<button class="nav-item${k===currentTab?' active':''}" data-tab="${k}" onclick="switchTab('${k}')">
+            <span class="nav-ico">${i}</span><span class="nav-label">${l}</span>
+            <span class="nav-badge" data-badge="${k}"></span>
+          </button>`).join('')}
+     </div>`).join('');
   refreshNavBadges();
 }
 

@@ -14,6 +14,9 @@ let drawerId = null;
 
 const TRACK_EMPTY = { rows: null, error: null };
 let drawerMatches = TRACK_EMPTY;
+/* Yorumlar da drawer acilinca cekiliyor: siparis basina birkac satir, ama
+   listede hicbir yerde gorunmuyorlar - onden cekmek bos istek olurdu. */
+let drawerComments = { rows: null, error: null };
 
 function trackerOf(id){ return tracker[id] || null; }
 
@@ -35,10 +38,12 @@ function openDetail(id){
   if(!records.some(r => r.id === id)) return;
   drawerId = id;
   drawerMatches = TRACK_EMPTY;
+  drawerComments = { rows: null, error: null };
   renderDetail();
   document.getElementById('drawer').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   loadDrawerMatches(id);
+  loadComments(id);
 }
 
 function closeDetail(){
@@ -54,6 +59,72 @@ async function loadDrawerMatches(id){
   if(drawerId !== id) return;                    // kullanıcı bu arada kapattı
   drawerMatches = error ? { rows:null, error:error.message } : { rows:data||[], error:null };
   renderDetail();
+}
+
+/* --- Yorumlar -------------------------------------------------------------
+
+   Siparis uzerinde konusma. Simdiye kadar tek bir `note` alani vardi: uzerine
+   yaziliyor, kim yazdi belli olmuyor ve bot o notu MUSTERIYE iletiyor
+   (tracker/messages.py) - yani ekip ici bir not yazmanin guvenli yeri yoktu.
+
+   Yorum duzenlenemiyor, yalnizca kendi yorumun silinebiliyor: sonradan
+   degistirilebilen kayit kayit sayilmaz. */
+async function loadComments(id){
+  const { data, error } = await sb.from(TABLES.comments)
+    .select('id,author_id,body,created_at')
+    .eq('order_id', id).order('created_at', { ascending:false }).limit(100);
+  if(drawerId !== id) return;                      // kullanici bu arada kapatti
+  drawerComments = error ? { rows:null, error:error.message } : { rows:data||[], error:null };
+  renderDetail();
+}
+
+async function addComment(){
+  const el = document.getElementById('cmtBox'); if(!el) return;
+  const body = el.value.trim();
+  if(!body) return;
+  const id = drawerId;
+  const btn = document.getElementById('cmtBtn');
+  if(btn) btn.disabled = true;
+  const { error } = await sb.from(TABLES.comments)
+    .insert({ order_id:id, author_id:me.id, body });
+  if(btn) btn.disabled = false;
+  if(error){ toast('Yorum eklenemedi: ' + error.message, 'err'); return; }
+  el.value = '';
+  await loadComments(id);
+}
+
+async function delComment(cid){
+  if(!confirm('Yorum silinsin mi?')) return;
+  const { error } = await sb.from(TABLES.comments).delete().eq('id', cid);
+  if(error){ toast('Silinemedi: ' + error.message, 'err'); return; }
+  await loadComments(drawerId);
+}
+
+function commentsBlock(r){
+  const c = drawerComments;
+  let liste;
+  if(c.error)          liste = `<div class="d-empty">Yorumlar okunamadı: ${esc(c.error)}</div>`;
+  else if(!c.rows)     liste = `<div class="d-empty">yükleniyor…</div>`;
+  else if(!c.rows.length) liste = `<div class="d-empty">Henüz yorum yok.</div>`;
+  else liste = `<div class="cmt-list">${c.rows.map(x => `
+    <div class="cmt">
+      <div class="cmt-h">
+        <span class="cmt-who">${esc(nameOf(x.author_id) || 'silinmiş kullanıcı')}</span>
+        <span class="cmt-t">${esc(agoText(x.created_at))}</span>
+        ${x.author_id === me.id
+          ? `<button class="cmt-del" onclick="delComment('${esc(x.id)}')" title="Sil">✕</button>` : ''}
+      </div>
+      <div class="cmt-b">${esc(x.body)}</div>
+    </div>`).join('')}</div>`;
+
+  return `<div class="d-box"><div class="d-box-h">Yorumlar
+      ${c.rows && c.rows.length ? `<span class="ov-n">${c.rows.length}</span>` : ''}</div>
+    <div class="cmt-new">
+      <textarea id="cmtBox" rows="2" placeholder="Ekip içi not — müşteriye gitmez…"
+        onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey))addComment()"></textarea>
+      <button class="icon-btn go" id="cmtBtn" onclick="addComment()">Yaz</button>
+    </div>
+    ${liste}</div>`;
 }
 
 /* Maç rozeti: kazanç yeşil, kayıp kırmızı, beraberlik gri. */
@@ -208,6 +279,7 @@ function renderDetail(){
     ${money}
     ${r.jobDesc?`<div class="d-box"><div class="d-box-h">İş açıklaması</div><div class="d-note">${esc(r.jobDesc)}</div></div>`:''}
     ${r.not?`<div class="d-box"><div class="d-box-h">Not</div><div class="d-note">${esc(r.not)}</div></div>`:''}
+    ${commentsBlock(r)}
     ${timelineBlock(r)}
 
     <div class="rec-actions" style="margin-top:18px">
