@@ -66,8 +66,8 @@ interface ResellRow {
   vendor_cost: number | null;
   vendor_currency: string | null;
   vendor_paid: boolean | null;
-  partner: string | null;
-  partner_pct: number | null;
+  /** Marketplace, now stored on the order itself — see migration 007. */
+  platform: string | null;
   /* Real lifecycle timestamps the database already keeps — preferred over
      guessing from created_at. */
   assigned_at: string | null;
@@ -185,9 +185,6 @@ function mapOrder(
         ? ((legacy[3].trim() || '$') as Currency)
         : '$',
     vpaid: hasVendorCol ? !!r.vendor_paid : legacy ? legacy[4] === '1' : false,
-    // Null on every order that predates the TZX deal — those stay 100% reXs'.
-    partner: r.partner?.trim() || null,
-    partnerPct: Number(r.partner_pct) || 0,
     status: (r.durum === 'odendi' ? 'tamam' : (r.durum || 'yeni')) as Status,
     cost: Number(fin.cost) || 0,
     cur,
@@ -198,7 +195,9 @@ function mapOrder(
     tarih: r.tarih ? shortDate(r.tarih) : shortDate(created),
     createdAt: created,
     completedAt: r.completed_at,
-    platform: fin.platform || (isAdmin ? 'Other' : '—'),
+    // resells.platform is the source of truth; order_finance.platform is kept
+    // for finance reporting and only used as a fallback for legacy rows.
+    platform: r.platform || fin.platform || 'Other',
     extras: Array.isArray(r.extras) ? r.extras : [],
     shot: r.image ? 'screenshot' : null,
     due: dueLabel,

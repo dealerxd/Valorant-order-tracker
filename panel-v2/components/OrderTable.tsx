@@ -1,9 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  costTL, netRevenue, ownProfit, partnerOf, partnerShare, progressLabel, routeOf, subLine, type Order,
-} from '@/lib/model';
+import { costTL, netRevenue, profit, progressLabel, routeOf, subLine, type Order } from '@/lib/model';
 import { TL } from '@/lib/format';
 import { C, FONT_DISPLAY } from '@/lib/ui';
 import { DoerChip, GameBadge, PaidLine, ProgressBar, StatusPill } from './OrderBits';
@@ -57,10 +55,7 @@ export function OrderTable({
             {orders.map((o) => {
               const on = selected.includes(o.id);
               const net = netRevenue(o);
-              // Headline is reXs' share; the partner's cut goes underneath.
-              const k = ownProfit(o);
-              const cut = partnerShare(o);
-              const partner = partnerOf(o);
+              const k = profit(o);
               return (
                 <tr
                   key={o.id}
@@ -113,18 +108,12 @@ export function OrderTable({
                   </td>
 
                   {isAdmin && (
-                    <td style={{ textAlign: 'right', paddingRight: 18, whiteSpace: 'nowrap' }}>
-                      <div style={{
-                        fontFamily: FONT_DISPLAY, fontSize: 15, fontWeight: 600,
-                        color: o.cost > 0 ? (k < 0 ? C.red : C.green) : C.amber,
-                      }}>
-                        {o.cost > 0 ? TL(k) : 'no finance'}
-                      </div>
-                      {o.cost > 0 && partner && (
-                        <div style={{ fontSize: 10.5, marginTop: 3, color: C.blue }}>
-                          {partner.name} {TL(cut)}
-                        </div>
-                      )}
+                    <td style={{
+                      textAlign: 'right', paddingRight: 18, fontFamily: FONT_DISPLAY, fontSize: 15,
+                      fontWeight: 600, whiteSpace: 'nowrap',
+                      color: o.cost > 0 ? (k < 0 ? C.red : C.green) : C.amber,
+                    }}>
+                      {o.cost > 0 ? TL(k) : 'no finance'}
                     </td>
                   )}
                 </tr>

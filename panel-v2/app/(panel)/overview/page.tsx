@@ -2,12 +2,12 @@ import { redirect } from 'next/navigation';
 import { GameFilter } from '@/components/GameFilter';
 import { KpiCard } from '@/components/KpiCard';
 import {
-  AlertsCard, FeedCard, FunnelCard, GameBreakdownCard, PartnerCard,
-  type Alert, type FeedEntry, type GameStat, type PartnerStat,
+  AlertsCard, FeedCard, FunnelCard, GameBreakdownCard,
+  type Alert, type FeedEntry, type GameStat,
 } from '@/components/OverviewPanels';
 import {
   loadPanel, averageTurnaround, costTL, grossRevenue, isExternal, netRevenue,
-  ownProfit, partnerBucket, partnerOf, partnerShare, profit, routeOf, type Order,
+  profit, routeOf, type Order,
 } from '@/lib/orders';
 import { GAME_KEYS, ST, STATUSES, type GameKey } from '@/lib/domain';
 import { TL, ago } from '@/lib/format';
@@ -33,9 +33,7 @@ export default async function OverviewPage({
 
   const withFinance = orders.filter((o) => o.cost > 0);
   const gross = withFinance.reduce((a, o) => a + grossRevenue(o), 0);
-  // Headline profit is what reaches reXs: partner cuts already taken out.
-  const net = withFinance.reduce((a, o) => a + ownProfit(o), 0);
-  const partnerCut = withFinance.reduce((a, o) => a + partnerShare(o), 0);
+  const net = withFinance.reduce((a, o) => a + profit(o), 0);
   const debt = orders.filter((o) => !o.paid && o.booster && o.status === 'tamam').reduce((a, o) => a + o.payout, 0);
   const open = orders.filter((o) => o.status !== 'tamam').length;
 
@@ -49,10 +47,7 @@ export default async function OverviewPage({
     { label: 'Open Jobs', value: String(open), hint: `${orders.length} active orders`, color: C.text, gradient: '160deg,#d4af37,#b8962f' },
     ...(isAdmin ? [
       { label: 'Gross Revenue (TL)', value: TL(gross), hint: `this period · ${withFinance.length} jobs with finance`, color: C.gold, gradient: '160deg,#d4af37,#b8962f' },
-      { label: 'Net Profit', value: TL(net), hint: partnerCut ? 'yours, after fees, payouts and partner cuts' : 'after fees and payouts', color: C.green, gradient: '160deg,#3ecf8e,#2f9e6c' },
-      ...(partnerCut ? [
-        { label: 'TZX Share', value: TL(partnerCut), hint: `partner cut on ${withFinance.filter((o) => partnerOf(o)).length} shared jobs`, color: C.blue, gradient: '160deg,#5a9ded,#3a6ea8' },
-      ] : []),
+      { label: 'Net Profit', value: TL(net), hint: 'after fees and payouts', color: C.green, gradient: '160deg,#3ecf8e,#2f9e6c' },
       { label: 'Booster Debt', value: TL(debt), hint: `${boosters.filter((b) => b.debt > 0).length} boosters awaiting payment`, color: C.red, gradient: '160deg,#e25555,#a83c3c' },
     ] : []),
     ...(isAdmin && ext.length
@@ -83,29 +78,6 @@ export default async function OverviewPage({
 
   const feed: FeedEntry[] = buildFeed(orders);
 
-  // GameBoost (wholly ours) vs Eldorado (50/50 with TZX). Buckets with no
-  // orders are dropped so the panel does not show an empty TZX row before
-  // the first partnered job exists.
-  const sharedPct = orders.find((o) => partnerBucket(o) === 'TZX')?.partnerPct ?? 50;
-  const partnerStats: PartnerStat[] = [
-    { key: 'own', label: 'Wholly yours', sub: '100% of the remaining profit', color: C.gold },
-    { key: 'TZX', label: 'Shared with TZX', sub: `${sharedPct}% of the remaining profit goes to TZX`, color: C.blue },
-  ]
-    .map((b) => {
-      const list = orders.filter((o) => partnerBucket(o) === b.key);
-      const fin = list.filter((o) => o.cost > 0);
-      return {
-        ...b,
-        jobs: list.length,
-        net: fin.reduce((a, o) => a + netRevenue(o), 0),
-        profit: fin.reduce((a, o) => a + profit(o), 0),
-        own: fin.reduce((a, o) => a + ownProfit(o), 0),
-        partner: fin.reduce((a, o) => a + partnerShare(o), 0),
-        href: `/orders?partner=${b.key}${lens ? `&game=${lens}` : ''}`,
-      };
-    })
-    .filter((s) => s.jobs > 0);
-
   return (
     <>
       <GameFilter counts={gameCounts} />
@@ -122,7 +94,6 @@ export default async function OverviewPage({
               avgDelivery={avgDelivery}
             />
             <AlertsCard alerts={alerts} />
-            {isAdmin && partnerStats.length > 0 && <PartnerCard stats={partnerStats} />}
             <GameBreakdownCard stats={gameStats} showFinance={isAdmin} />
             <FeedCard feed={feed} />
           </div>

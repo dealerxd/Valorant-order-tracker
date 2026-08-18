@@ -2,9 +2,7 @@
 
 import Link from 'next/link';
 import { CalendarDays } from 'lucide-react';
-import {
-  netRevenue, ownProfit, partnerOf, partnerShare, progressLabel, routeOf, subLine, type Order,
-} from '@/lib/model';
+import { netRevenue, profit, progressLabel, routeOf, subLine, type Order } from '@/lib/model';
 import { TL } from '@/lib/format';
 import { C, FONT_DISPLAY, chip } from '@/lib/ui';
 import { DoerChip, GameBadge, PaidChip, ProgressBar, StatusPill } from './OrderBits';
@@ -28,8 +26,7 @@ export function OrderCards({
       )}
 
       {orders.map((o) => {
-        const k = ownProfit(o);
-        const partner = partnerOf(o);
+        const k = profit(o);
         return (
           <div
             key={o.id}
@@ -80,7 +77,7 @@ export function OrderCards({
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '1px' }}>
-                      {partner ? 'your profit' : 'profit'}
+                      profit
                     </div>
                     <div style={{
                       fontFamily: FONT_DISPLAY, fontSize: 17,
@@ -88,11 +85,6 @@ export function OrderCards({
                     }}>
                       {o.cost > 0 ? TL(k) : 'no finance'}
                     </div>
-                    {o.cost > 0 && partner && (
-                      <div style={{ fontSize: 10.5, color: C.blue, marginTop: 2 }}>
-                        {partner.name} {TL(partnerShare(o))}
-                      </div>
-                    )}
                   </div>
                 </>
               ) : (

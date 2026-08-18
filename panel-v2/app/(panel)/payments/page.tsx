@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { FilterTabs, type Tab } from '@/components/FilterTabs';
 import { PaymentsView, type PayRow } from '@/components/PaymentsView';
 import { loadPanel } from '@/lib/orders';
-import { costTL, isExternal, partnerShare } from '@/lib/model';
+import { costTL, isExternal } from '@/lib/model';
 import { createClient } from '@/lib/supabase/server';
 import { C } from '@/lib/ui';
 
@@ -133,7 +133,6 @@ export default async function PaymentsPage({
         rows={rows}
         period={{ start: period.start, end: period.end }}
         summary={{ accrued: paid + outstanding, paid, outstanding }}
-        partnerShare={scoped.filter((o) => o.cost > 0).reduce((a, o) => a + partnerShare(o), 0)}
       />
     </div>
   );

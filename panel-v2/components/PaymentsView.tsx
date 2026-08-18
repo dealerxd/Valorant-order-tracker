@@ -23,13 +23,11 @@ export interface PayRow {
 }
 
 export function PaymentsView({
-  rows, period, summary, partnerShare,
+  rows, period, summary,
 }: {
   rows: PayRow[];
   period: { start: string; end: string };
   summary: { accrued: number; paid: number; outstanding: number };
-  /** TZX's accrued cut for the period. Reporting only — see the note below. */
-  partnerShare: number;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
@@ -156,19 +154,6 @@ export function PaymentsView({
         <Summary label="period accrued" value={TL(summary.accrued)} />
         <Summary label="paid" value={TL(summary.paid)} color={C.green} />
         <Summary label="outstanding" value={TL(summary.outstanding)} color={C.red} />
-        {partnerShare !== 0 && (
-          <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-            <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '1px' }}>
-              TZX share (accrued)
-            </div>
-            <div style={{ fontFamily: FONT_DISPLAY, fontSize: 19, marginTop: 3, color: C.blue }}>
-              {TL(partnerShare)}
-            </div>
-            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
-              50% of Eldorado profit · not settled here yet
-            </div>
-          </div>
-        )}
       </div>
 
       <Toast message={error} onClose={() => setError('')} />

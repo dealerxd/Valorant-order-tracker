@@ -6,8 +6,7 @@ import { Archive, CalendarDays, Gamepad2, Pencil, Trash2, Wallet, X } from 'luci
 import { addNote, archive, deleteOrders, setPaid, setStatus } from '@/lib/actions';
 import { G, ORDER_LABEL, ST } from '@/lib/domain';
 import {
-  costTL, isExternal, netRevenue, nextStatus, ownProfit, partnerOf, partnerShare,
-  profit, progress, routeOf, type Order,
+  costTL, isExternal, netRevenue, nextStatus, profit, progress, routeOf, type Order,
 } from '@/lib/model';
 import { TL } from '@/lib/format';
 import { C, FONT_DISPLAY, chip, dot, fillStyle, ghostButton, goldButton, innerCard, label10, rowBetween } from '@/lib/ui';
@@ -44,7 +43,6 @@ export function OrderDrawer({
   const g = G(o.game);
   const p = progress(o);
   const ext = isExternal(o);
-  const partner = partnerOf(o);
   const next = nextStatus(o.status);
   const wins = o.matches.filter((m) => m === 'W').length;
 
@@ -168,27 +166,11 @@ export function OrderDrawer({
                 <b style={{ fontFamily: FONT_DISPLAY, fontSize: 14, color: C.text2 }}>{TL(costTL(o))}</b>
               </div>
               <div style={{ ...rowBetween, padding: '8px 0 3px', marginTop: 5, borderTop: `1px solid ${C.border}` }}>
-                <span>remaining profit</span>
+                <span>profit</span>
                 <b style={{ fontFamily: FONT_DISPLAY, fontSize: 16, color: o.cost > 0 ? (profit(o) < 0 ? C.red : C.green) : C.amber }}>
                   {o.cost > 0 ? TL(profit(o)) : 'no finance'}
                 </b>
               </div>
-
-              {/* Eldorado jobs are shared 50/50 with TZX; GameBoost is wholly ours. */}
-              {o.cost > 0 && partner && (
-                <>
-                  <div style={rowBetween}>
-                    <span>{partner.name} · %{partner.sharePct}</span>
-                    <b style={{ fontFamily: FONT_DISPLAY, fontSize: 14, color: C.blue }}>−{TL(partnerShare(o))}</b>
-                  </div>
-                  <div style={{ ...rowBetween, padding: '8px 0 3px', marginTop: 5, borderTop: `1px solid ${C.border}` }}>
-                    <span>yours</span>
-                    <b style={{ fontFamily: FONT_DISPLAY, fontSize: 16, color: ownProfit(o) < 0 ? C.red : C.green }}>
-                      {TL(ownProfit(o))}
-                    </b>
-                  </div>
-                </>
-              )}
             </div>
           )}
 

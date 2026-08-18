@@ -3,7 +3,7 @@ import { GameFilter } from '@/components/GameFilter';
 import { FilterTabs, ViewSwitcher, type Tab } from '@/components/FilterTabs';
 import { OrdersView, type ViewMode } from '@/components/OrdersView';
 import { loadPanel } from '@/lib/orders';
-import { filterOrders, isExternal, partnerBucket } from '@/lib/model';
+import { filterOrders, isExternal } from '@/lib/model';
 import { GAME_KEYS, ST, STATUSES } from '@/lib/domain';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +13,6 @@ export interface OrdersSearchParams {
   status?: string;
   game?: string;
   src?: string;
-  partner?: string;
   q?: string;
   late?: string;
   unpaid?: string;
@@ -34,14 +33,12 @@ export default async function OrdersPage({
   const view: ViewMode = sp.view === 'cards' ? 'cards' : sp.view === 'board' ? 'board' : 'table';
   const status = sp.status ?? '';
   const src = sp.src ?? '';
-  const partner = sp.partner ?? '';
   const game = sp.game ?? 'all';
 
   const rows = filterOrders(all, {
     status,
     game,
     src,
-    partner,
     q: sp.q,
     late: sp.late === '1',
     unpaid: sp.unpaid === '1',
@@ -67,15 +64,6 @@ export default async function OrdersPage({
     { value: 'external', label: 'Outsourced', count: extCount },
   ];
 
-  // The ownership split. Admin-only: it is a finance lens. Only rendered
-  // once at least one shared order exists.
-  const sharedCount = inGame.filter((o) => partnerBucket(o) !== 'own').length;
-  const partnerTabs: Tab[] = [
-    { value: '', label: 'All', count: inGame.length },
-    { value: 'own', label: '100% you', count: inGame.length - sharedCount },
-    { value: 'TZX', label: 'TZX shared', count: sharedCount },
-  ];
-
   return (
     <>
       <GameFilter counts={gameCounts} />
@@ -84,7 +72,6 @@ export default async function OrdersPage({
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <FilterTabs param="status" tabs={statusTabs} current={status} variant="status" />
             <FilterTabs param="src" tabs={srcTabs} current={src} />
-            {isAdmin && sharedCount > 0 && <FilterTabs param="partner" tabs={partnerTabs} current={partner} />}
             <ViewSwitcher current={view} />
           </div>
 

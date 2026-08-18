@@ -319,9 +319,6 @@ export interface NewOrderInput {
   vcost: number;
   vcur: Currency;
   vpaid: boolean;
-  /** Profit-share partner, or '' when the order is wholly ours. */
-  partner: string;
-  partnerPct: number;
   /** Booster fee in TL, computed from the price list. */
   payout: number;
 }
@@ -355,10 +352,9 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult & 
       vendor_cost: external ? Number(input.vcost) || 0 : null,
       vendor_currency: external ? CUR_CODE[input.vcur] : null,
       vendor_paid: external ? !!input.vpaid : false,
-      // Frozen at creation: renegotiating the split later must not rewrite
-      // what this order was worth. Boosters never set it.
-      partner: isBooster || !input.partner ? null : input.partner,
-      partner_pct: isBooster || !input.partner ? null : (Number(input.partnerPct) || 0),
+      // Platform lives on the order now (migration 007): it decides who can
+      // see the row, so it has to be set before any finance row exists.
+      platform: input.platform || 'Other',
     };
 
     const { data, error } = await sb.from('resells').insert(row).select('id').single();

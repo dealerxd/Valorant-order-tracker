@@ -32,10 +32,6 @@ export interface Order {
   vcost: number;
   vcur: Currency;
   vpaid: boolean;
-  /** Profit-share partner recorded on this order; null = wholly reXs'. */
-  partner: string | null;
-  /** The partner's percentage, frozen when the order was created. */
-  partnerPct: number;
   status: Status;
   cost: number;
   cur: Currency;
@@ -112,53 +108,8 @@ export const costTL = (o: Pick<Order, 'fulfil' | 'vcost' | 'vcur' | 'rate' | 'pa
   isExternal(o) ? Math.round((Number(o.vcost) || 0) * (o.vcur === '₺' ? 1 : (Number(o.rate) || 41))) : o.payout;
 
 /** "Kalan kâr" — what is left after the marketplace commission and whoever
-    fulfilled the job. This is the figure a partnership splits. */
+    fulfilled the job (our own booster's payout, or the outside seller's fee). */
 export const profit = (o: Order) => netRevenue(o) - costTL(o);
-
-/* ---- partnerships -------------------------------------------------------
-   Some orders are shared with an outside partner, who takes a cut of the
-   remaining profit. Today that is TZX at 50% on Eldorado jobs; GameBoost is
-   wholly reXs'.
-
-   This is stored per order (resells.partner / partner_pct), NOT derived from
-   the marketplace. Two reasons:
-     - historic Eldorado orders predate the TZX deal and are 100% reXs';
-     - freezing the percentage means renegotiating the deal cannot silently
-       rewrite what past orders were worth, the same way order_finance.rate
-       freezes the exchange rate.
-
-   PARTNER_DEFAULTS only seeds the New Order form. A loss splits like a gain. */
-
-export interface PartnerRule {
-  name: string;
-  /** Percent of `profit` the partner takes. */
-  sharePct: number;
-}
-
-/** Marketplace -> the partnership to pre-select for a NEW order. Changing
-    this never touches orders that already exist. */
-export const PARTNER_DEFAULTS: Record<string, PartnerRule> = {
-  Eldorado: { name: 'TZX', sharePct: 50 },
-};
-
-/** The partnership recorded on this order, or null when it is wholly ours. */
-export function partnerOf(o: Pick<Order, 'partner' | 'partnerPct'>): PartnerRule | null {
-  if (!o.partner) return null;
-  return { name: o.partner, sharePct: o.partnerPct };
-}
-
-/** The partner's cut, 0 when the order is wholly ours. */
-export function partnerShare(o: Order): number {
-  const p = partnerOf(o);
-  return p ? Math.round(profit(o) * p.sharePct / 100) : 0;
-}
-
-/** What actually lands with reXs after the partner takes their cut. */
-export const ownProfit = (o: Order) => profit(o) - partnerShare(o);
-
-/** Bucket key for grouping and filtering: 'own' or the partner's name. */
-export const partnerBucket = (o: Pick<Order, 'partner' | 'partnerPct'>) =>
-  partnerOf(o)?.name ?? 'own';
 
 /** 0-100. Tracked rank jobs use the ladder position; everything else falls
     back to the status, because nobody reports partial progress there. */
@@ -205,8 +156,6 @@ export interface OrderFilters {
   game?: string;
   src?: string;
   q?: string;
-  /** Partner bucket: 'own' (GameBoost) or a partner name such as 'TZX'. */
-  partner?: string;
   /** Extra lenses the Overview alert rows link into. */
   late?: boolean;
   unpaid?: boolean;
@@ -220,7 +169,6 @@ export function filterOrders(orders: Order[], f: OrderFilters): Order[] {
     if (f.game && f.game !== 'all' && o.game !== f.game) return false;
     if (f.src === 'internal' && isExternal(o)) return false;
     if (f.src === 'external' && !isExternal(o)) return false;
-    if (f.partner && partnerBucket(o) !== f.partner) return false;
     if (f.late && !o.late) return false;
     if (f.unpaid && (isExternal(o) ? o.vpaid : o.paid)) return false;
     if (f.nofinance && o.cost !== 0) return false;

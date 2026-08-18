@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import { createOrder, type NewOrderInput } from '@/lib/actions';
 import { EXTRAS, G, GAMES, GAME_KEYS, PLATFORMS, REGIONS, type Currency, type GameKey } from '@/lib/domain';
-import { PARTNER_DEFAULTS } from '@/lib/model';
 import { parsePaste, parsedChips } from '@/lib/parse';
 import { payoutFromTables, type PricingTables } from '@/lib/pricing';
 import { TL } from '@/lib/format';
@@ -13,9 +12,6 @@ import { C, FONT_DISPLAY, chip, ghostButton, goldButton, inputStyle, label11, pi
 import { Toast } from './Toast';
 
 type FormRole = 'admin' | 'booster';
-
-/** Every partner we can attach to an order, deduplicated across defaults. */
-const PARTNER_NAMES = [...new Set(Object.values(PARTNER_DEFAULTS).map((p) => p.name))];
 
 interface Draft {
   game: GameKey;
@@ -38,12 +34,6 @@ interface Draft {
   vcost: string;
   vcur: Currency;
   vpaid: boolean;
-  /** '' = wholly ours. Seeded from the marketplace, overridable. */
-  partner: string;
-  partnerPct: string;
-  /** True once the admin has touched the partner control by hand, after
-      which changing the marketplace stops overwriting their choice. */
-  partnerTouched: boolean;
 }
 
 const emptyDraft = (rate: number): Draft => ({
@@ -51,7 +41,6 @@ const emptyDraft = (rate: number): Draft => ({
   region: 'TR', startRR: '0', riotId: '', platform: '', cost: '', cur: '$',
   feePct: '10', rate: String(rate), boosterId: '', extras: [],
   fulfil: 'internal', vendor: '', vcost: '', vcur: '$', vpaid: false,
-  partner: '', partnerPct: '50', partnerTouched: false,
 });
 
 export function NewOrderButton(props: {
@@ -123,8 +112,6 @@ function NewOrderModal({
       );
   const net = Math.round((Number(f.cost) || 0) * (1 - (Number(f.feePct) || 0) / 100) * (f.cur === '₺' ? 1 : Number(f.rate) || 0));
   const kar = net - payout;
-  const partnerCut = f.partner ? Math.round(kar * (Number(f.partnerPct) || 0) / 100) : 0;
-  const yours = kar - partnerCut;
 
   const save = () => {
     const input: NewOrderInput = {
@@ -148,8 +135,6 @@ function NewOrderModal({
       vcost: Number(f.vcost) || 0,
       vcur: f.vcur,
       vpaid: f.vpaid,
-      partner: asBooster ? '' : f.partner,
-      partnerPct: Number(f.partnerPct) || 0,
       payout,
     };
 
@@ -307,50 +292,10 @@ function NewOrderModal({
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginTop: 12 }}>
               <Field label="Marketplace">
-                <select
-                  value={f.platform}
-                  onChange={(e) => {
-                    const platform = e.target.value;
-                    // Seed the partnership from the marketplace, unless the
-                    // admin already set it by hand.
-                    setF((d) => {
-                      if (d.partnerTouched) return { ...d, platform };
-                      const suggested = PARTNER_DEFAULTS[platform];
-                      return {
-                        ...d,
-                        platform,
-                        partner: suggested?.name ?? '',
-                        partnerPct: String(suggested?.sharePct ?? 50),
-                      };
-                    });
-                  }}
-                  style={inputStyle}
-                >
+                <select value={f.platform} onChange={(e) => set('platform', e.target.value)} style={inputStyle}>
                   <option value="">— select —</option>
                   {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
-              </Field>
-
-              <Field label="Profit share">
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <select
-                    value={f.partner}
-                    onChange={(e) => setF((d) => ({ ...d, partner: e.target.value, partnerTouched: true }))}
-                    style={{ ...inputStyle, flex: 1 }}
-                  >
-                    <option value="">— 100% you —</option>
-                    {PARTNER_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                  {f.partner && (
-                    <input
-                      type="number"
-                      value={f.partnerPct}
-                      onChange={(e) => setF((d) => ({ ...d, partnerPct: e.target.value, partnerTouched: true }))}
-                      aria-label="Partner percentage"
-                      style={{ ...inputStyle, width: 74, textAlign: 'right' }}
-                    />
-                  )}
-                </div>
               </Field>
 
               <Field label="Boost Price">
@@ -462,23 +407,11 @@ function NewOrderModal({
                 <b style={{ fontFamily: FONT_DISPLAY, fontSize: 15, color: C.blue }}>{net ? TL(net) : '—'}</b>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '8px 0 3px', marginTop: 5, borderTop: `1px solid ${C.border}`, color: C.muted }}>
-                <span>remaining profit</span>
+                <span>your profit</span>
                 <b style={{ fontFamily: FONT_DISPLAY, fontSize: 17, color: !net ? C.amber : kar < 0 ? C.red : C.green }}>
                   {net ? TL(kar) : 'enter boost price'}
                 </b>
               </div>
-              {net > 0 && f.partner && (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '3px 0', color: C.muted }}>
-                    <span>{f.partner} · %{Number(f.partnerPct) || 0}</span>
-                    <b style={{ fontFamily: FONT_DISPLAY, fontSize: 15, color: C.blue }}>−{TL(partnerCut)}</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '8px 0 3px', marginTop: 5, borderTop: `1px solid ${C.border}`, color: C.muted }}>
-                    <span>yours</span>
-                    <b style={{ fontFamily: FONT_DISPLAY, fontSize: 17, color: yours < 0 ? C.red : C.green }}>{TL(yours)}</b>
-                  </div>
-                </>
-              )}
             </>
           )}
         </div>
