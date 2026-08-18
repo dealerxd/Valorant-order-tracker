@@ -30,6 +30,10 @@ export interface Order {
   /** Role of whoever is doing the job, null when nobody is assigned or it
       went to an outside panel. Decides who owns the profit — see below. */
   doerRole: Role | null;
+  /** Whether this order falls inside the partnership era. Frozen per order
+      at read time from the partnership start date; false for everything
+      that predates the partnership. */
+  sharedProfit: boolean;
   fulfil: 'internal' | 'external';
   vendor: string;
   vcost: number;
@@ -125,16 +129,22 @@ export const profit = (o: Order) => netRevenue(o) - costTL(o);
      baska biri yapti   -> kalan kâr ikiye bölünür
 
    Ucuncu satir hem kendi calisanimizi hem disariya verilen resell'i
-   kapsiyor: ikisinde de bir ucret odenmis oluyor (costTL), kalan da
-   ortak emegin karsiligi sayilip bolunuyor.
+   kapsiyor: ikisinde de bir ucret odendi (costTL), kalan da ortak emegin
+   karsiligi sayilip bolunuyor.
 
-   Kural yeni bir kolona degil, isi yapanin ROLUNE dayaniyor -- "kim yapti"
-   bilgisi zaten booster_id / vendor'da duruyor. */
+   AMA once `sharedProfit` bakiliyor: ortaklik baslamadan ONCE alinmis her
+   siparis kosulsuz %100 reXs'in. Bu sinir olmadan kural geriye dogru da
+   islerdi ve ortaklik yokken kazanilmis parayi bolusturur -- ayni hatayi
+   bir kez `resells.partner` kolonunu dusurdugumuzde yapmistik.
+
+   Sinir tek bir tarih (pricing tablosunda 'partnership'), bir kez konur ve
+   degismez. Sinirin ICINDE sahiplik turetilmis kalir, cunku isi kimin
+   yaptigi mesru olarak degisebilir (yeniden atama). */
 
 export type ProfitOwner = 'admin' | 'ortak' | 'split';
 
 export function profitOwner(o: Order): ProfitOwner {
-  if (o.platform !== 'Eldorado') return 'admin';
+  if (!o.sharedProfit) return 'admin';
   if (o.doerRole === 'admin') return 'admin';
   if (o.doerRole === 'ortak') return 'ortak';
   return 'split';

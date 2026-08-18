@@ -147,3 +147,20 @@ create policy resell_comments_ortak_ekle on resell_comments for insert to authen
 --   b) security definer RPC (ayni guvenlik durusu, WARN lint -- mevcut
 --      is_admin()/is_active() ile ayni sinif)
 --   c) hassas kolonlari ayri tabloya tasi + vanilla paneli de guncelle
+
+-- =====================================================================
+-- Ortakligin baslangic siniri
+-- =====================================================================
+-- Kar sahipligi kurali (platform + isi yapanin rolu) TURETILMIS oldugu icin
+-- sinirsiz birakilirsa GERIYE dogru da islerdi: ortaklik daha yokken alinmis
+-- Eldorado siparislerinin karini da bolusturur. Ayni hatayi bir kez
+-- resells.partner kolonunu dusururken yapmistik.
+--
+-- Bu yuzden tek bir sinir var: bu andan ONCE olusmus her siparis kosulsuz
+-- %100 reXs'in, sonsuza kadar. Sinirin ICINDE sahiplik turetilmis kalir,
+-- cunku isi kimin yaptigi mesru olarak degisebilir (yeniden atama).
+--
+-- Sinir bir kez konur ve DEGISTIRILMEZ; degistirmek gecmisi yeniden yazar.
+insert into pricing (id, data, updated_at)
+values ('partnership', jsonb_build_object('since', now()), now())
+on conflict (id) do nothing;   -- do nothing: mevcut sinir asla ezilmesin

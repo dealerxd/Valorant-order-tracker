@@ -124,6 +124,8 @@ function mapOrder(
   comments: CommentRow[] | undefined,
   isAdmin: boolean,
   now: number,
+  /** Ortakligin basladigi an; oncesi kosulsuz %100 reXs'in. */
+  partnershipSince: number | null,
 ): Order {
   const fin = f ?? ({} as FinanceRow);
   const note = r.note || '';
@@ -178,6 +180,11 @@ function mapOrder(
     boosterId: r.booster_id || null,
     // Who actually did it decides who owns the Eldorado profit.
     doerRole: r.booster_id && profiles[r.booster_id] ? profiles[r.booster_id].role : null,
+    sharedProfit:
+      (r.platform || fin.platform) === 'Eldorado'
+      && partnershipSince != null
+      && created != null
+      && new Date(created).getTime() >= partnershipSince,
     fulfil: external ? 'external' : 'internal',
     vendor: hasVendorCol ? r.vendor!.trim() : legacy ? legacy[1].trim() : '',
     vcost: hasVendorCol ? Number(r.vendor_cost) || 0 : legacy ? Number(legacy[2]) || 0 : 0,
@@ -385,10 +392,16 @@ export const loadPanel = cache(async (): Promise<PanelData | null> => {
   });
 
   const pricing: PricingTables = { step: {}, netWin: {}, settings: {} };
+  // Ortakligin basladigi an. Kayit yoksa hic ortaklik yok demektir.
+  let partnershipSince: number | null = null;
   ((priceRes.data as { id: string; data: unknown }[]) || []).forEach((p) => {
     if (p.id === 'step_prices') pricing.step = unnest(p.data);
     if (p.id === 'net_win') pricing.netWin = unnest(p.data);
     if (p.id === 'settings') pricing.settings = (p.data as Record<string, unknown>) || {};
+    if (p.id === 'partnership') {
+      const since = (p.data as { since?: string } | null)?.since;
+      partnershipSince = since ? new Date(since).getTime() : null;
+    }
   });
 
   // Rows come newest-first, so the first sighting of each currency wins.
@@ -399,7 +412,7 @@ export const loadPanel = cache(async (): Promise<PanelData | null> => {
 
   const now = Date.now();
   const orders = ((oRes.data as ResellRow[]) || []).map((r) =>
-    mapOrder(r, profiles, finance[r.id], tracker[r.id], activity[r.id], comments[r.id], isAdmin, now));
+    mapOrder(r, profiles, finance[r.id], tracker[r.id], activity[r.id], comments[r.id], isAdmin, now, partnershipSince));
 
   return {
     me,
