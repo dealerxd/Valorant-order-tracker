@@ -6,8 +6,8 @@ import {
   type Alert, type FeedEntry, type GameStat,
 } from '@/components/OverviewPanels';
 import {
-  loadPanel, averageTurnaround, costTL, grossRevenue, isExternal, netRevenue,
-  profit, routeOf, type Order,
+  loadPanel, adminShare, averageTurnaround, costTL, grossRevenue, isExternal,
+  netRevenue, partnerShare, profit, routeOf, type Order,
 } from '@/lib/orders';
 import { GAME_KEYS, ST, STATUSES, type GameKey } from '@/lib/domain';
 import { TL, ago } from '@/lib/format';
@@ -34,6 +34,9 @@ export default async function OverviewPage({
   const withFinance = orders.filter((o) => o.cost > 0);
   const gross = withFinance.reduce((a, o) => a + grossRevenue(o), 0);
   const net = withFinance.reduce((a, o) => a + profit(o), 0);
+  // Eldorado kârı işi yapana göre paylaşılıyor; bu iki rakam onu ayırıyor.
+  const mine = withFinance.reduce((a, o) => a + adminShare(o), 0);
+  const partners = withFinance.reduce((a, o) => a + partnerShare(o), 0);
   const debt = orders.filter((o) => !o.paid && o.booster && o.status === 'tamam').reduce((a, o) => a + o.payout, 0);
   const open = orders.filter((o) => o.status !== 'tamam').length;
 
@@ -47,7 +50,10 @@ export default async function OverviewPage({
     { label: 'Open Jobs', value: String(open), hint: `${orders.length} active orders`, color: C.text, gradient: '160deg,#d4af37,#b8962f' },
     ...(isAdmin ? [
       { label: 'Gross Revenue (TL)', value: TL(gross), hint: `this period · ${withFinance.length} jobs with finance`, color: C.gold, gradient: '160deg,#d4af37,#b8962f' },
-      { label: 'Net Profit', value: TL(net), hint: 'after fees and payouts', color: C.green, gradient: '160deg,#3ecf8e,#2f9e6c' },
+      { label: 'Net Profit', value: TL(net), hint: partners ? `${TL(mine)} yours · ${TL(partners)} partner` : 'after fees and payouts', color: C.green, gradient: '160deg,#3ecf8e,#2f9e6c' },
+      ...(partners ? [
+        { label: 'Partner Share', value: TL(partners), hint: 'Eldorado profit owed to the partner', color: C.blue, gradient: '160deg,#5a9ded,#3a6ea8' },
+      ] : []),
       { label: 'Booster Debt', value: TL(debt), hint: `${boosters.filter((b) => b.debt > 0).length} boosters awaiting payment`, color: C.red, gradient: '160deg,#e25555,#a83c3c' },
     ] : []),
     ...(isAdmin && ext.length

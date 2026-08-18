@@ -176,6 +176,8 @@ function mapOrder(
     riotId: r.riot_id || '—',
     booster: r.booster_id && profiles[r.booster_id] ? (profiles[r.booster_id].display_name || '') : '',
     boosterId: r.booster_id || null,
+    // Who actually did it decides who owns the Eldorado profit.
+    doerRole: r.booster_id && profiles[r.booster_id] ? profiles[r.booster_id].role : null,
     fulfil: external ? 'external' : 'internal',
     vendor: hasVendorCol ? r.vendor!.trim() : legacy ? legacy[1].trim() : '',
     vcost: hasVendorCol ? Number(r.vendor_cost) || 0 : legacy ? Number(legacy[2]) || 0 : 0,

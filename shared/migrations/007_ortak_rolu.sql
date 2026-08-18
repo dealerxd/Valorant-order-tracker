@@ -47,8 +47,11 @@ alter table profiles drop constraint if exists profiles_role_check;
 alter table profiles add constraint profiles_role_check
   check (role in ('admin', 'ortak', 'booster'));
 
+-- cut_pct KULLANILMIYOR: Eldorado paylasimi sabit 50/50 ve isi FIILEN kimin
+-- yaptigina bakiyor (reXs kendi yaptiysa %100 onun, ortak yaptiysa %100
+-- onun, baskasi yaptiysa kalan ikiye bolunuyor), kisi basi yuzdeye degil.
 comment on column profiles.cut_pct is
-  'Ortagin Eldorado karindan aldigi yuzde. Diger rollerde bos.';
+  'KULLANILMIYOR. Eldorado kar paylasimi sabit 50/50 ve isi kimin yaptigina bakiyor, kisi basi yuzdeye degil.';
 
 create or replace function public.is_partner()
 returns boolean language sql stable security definer set search_path = public as $$

@@ -27,6 +27,9 @@ export interface Order {
   riotId: string;
   booster: string;
   boosterId: string | null;
+  /** Role of whoever is doing the job, null when nobody is assigned or it
+      went to an outside panel. Decides who owns the profit — see below. */
+  doerRole: Role | null;
   fulfil: 'internal' | 'external';
   vendor: string;
   vcost: number;
@@ -57,10 +60,12 @@ export interface Order {
   financeHidden: boolean;
 }
 
+export type Role = 'admin' | 'ortak' | 'booster';
+
 export interface Profile {
   id: string;
   display_name: string | null;
-  role: 'admin' | 'booster';
+  role: Role;
   iban?: string | null;
   capacity?: number | null;
   active?: boolean | null;
@@ -110,6 +115,41 @@ export const costTL = (o: Pick<Order, 'fulfil' | 'vcost' | 'vcur' | 'rate' | 'pa
 /** "Kalan kâr" — what is left after the marketplace commission and whoever
     fulfilled the job (our own booster's payout, or the outside seller's fee). */
 export const profit = (o: Order) => netRevenue(o) - costTL(o);
+
+/* ---- Eldorado kâr paylaşımı -------------------------------------------
+   GameBoost tamamen reXs'in. Eldorado'da kâr, işi FİİLEN kimin yaptığına
+   bakıyor:
+
+     reXs kendi yaptı   -> %100 reXs
+     ortak kendi yaptı  -> %100 ortak
+     baska biri yapti   -> kalan kâr ikiye bölünür
+
+   Ucuncu satir hem kendi calisanimizi hem disariya verilen resell'i
+   kapsiyor: ikisinde de bir ucret odenmis oluyor (costTL), kalan da
+   ortak emegin karsiligi sayilip bolunuyor.
+
+   Kural yeni bir kolona degil, isi yapanin ROLUNE dayaniyor -- "kim yapti"
+   bilgisi zaten booster_id / vendor'da duruyor. */
+
+export type ProfitOwner = 'admin' | 'ortak' | 'split';
+
+export function profitOwner(o: Order): ProfitOwner {
+  if (o.platform !== 'Eldorado') return 'admin';
+  if (o.doerRole === 'admin') return 'admin';
+  if (o.doerRole === 'ortak') return 'ortak';
+  return 'split';
+}
+
+/** Kârın reXs'e düşen kısmı. */
+export function adminShare(o: Order): number {
+  const owner = profitOwner(o);
+  if (owner === 'admin') return profit(o);
+  if (owner === 'ortak') return 0;
+  return Math.round(profit(o) / 2);
+}
+
+/** Kârın ortağa düşen kısmı. */
+export const partnerShare = (o: Order) => profit(o) - adminShare(o);
 
 /** 0-100. Tracked rank jobs use the ladder position; everything else falls
     back to the status, because nobody reports partial progress there. */

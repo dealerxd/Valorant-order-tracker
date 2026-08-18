@@ -6,7 +6,8 @@ import { Archive, CalendarDays, Gamepad2, Pencil, Trash2, Wallet, X } from 'luci
 import { addNote, archive, deleteOrders, setPaid, setStatus } from '@/lib/actions';
 import { G, ORDER_LABEL, ST } from '@/lib/domain';
 import {
-  costTL, isExternal, netRevenue, nextStatus, profit, progress, routeOf, type Order,
+  adminShare, costTL, isExternal, netRevenue, nextStatus, partnerShare,
+  profit, profitOwner, progress, routeOf, type Order,
 } from '@/lib/model';
 import { TL } from '@/lib/format';
 import { C, FONT_DISPLAY, chip, dot, fillStyle, ghostButton, goldButton, innerCard, label10, rowBetween } from '@/lib/ui';
@@ -171,6 +172,28 @@ export function OrderDrawer({
                   {o.cost > 0 ? TL(profit(o)) : 'no finance'}
                 </b>
               </div>
+
+              {/* Eldorado kârı işi kimin yaptığına göre sahiplenilir; GameBoost
+                  tamamen bizim, o yüzden orada bu blok hiç çıkmıyor. */}
+              {o.cost > 0 && o.platform === 'Eldorado' && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
+                  <div style={{ ...label10, marginBottom: 6 }}>
+                    {profitOwner(o) === 'split' ? 'split 50 / 50' : 'kept in full'}
+                  </div>
+                  <div style={rowBetween}>
+                    <span>you</span>
+                    <b style={{ fontFamily: FONT_DISPLAY, fontSize: 14, color: adminShare(o) ? C.green : C.muted }}>
+                      {TL(adminShare(o))}
+                    </b>
+                  </div>
+                  <div style={rowBetween}>
+                    <span>partner</span>
+                    <b style={{ fontFamily: FONT_DISPLAY, fontSize: 14, color: partnerShare(o) ? C.blue : C.muted }}>
+                      {TL(partnerShare(o))}
+                    </b>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
