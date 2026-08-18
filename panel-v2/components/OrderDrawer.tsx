@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Archive, CalendarDays, Gamepad2, Pencil, Wallet, X } from 'lucide-react';
-import { addNote, archive, setPaid, setStatus } from '@/lib/actions';
+import { Archive, CalendarDays, Gamepad2, Pencil, Trash2, Wallet, X } from 'lucide-react';
+import { addNote, archive, deleteOrders, setPaid, setStatus } from '@/lib/actions';
 import { G, ORDER_LABEL, ST } from '@/lib/domain';
 import {
   costTL, isExternal, netRevenue, nextStatus, ownProfit, partnerOf, partnerShare,
@@ -28,6 +28,8 @@ export function OrderDrawer({
   const [pending, start] = useTransition();
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+  // Delete is irreversible, so it arms first and only fires on a second click.
+  const [armed, setArmed] = useState(false);
 
   const close = () => (standalone ? router.push('/orders') : router.back());
 
@@ -242,6 +244,49 @@ export function OrderDrawer({
           >
             <Archive size={13} /> Archive
           </button>
+
+          {/* Permanent delete, for a job opened by mistake. Offered to admins
+              always, and to a booster only while the job is unpaid — the same
+              rule the old panel used, and the one RLS enforces anyway. */}
+          {(isAdmin || !o.paid) && (
+            armed ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: C.red }}>Kalıcı olarak silinsin mi?</span>
+                <button
+                  disabled={pending}
+                  onClick={() => run(async () => {
+                    const r = await deleteOrders([o.id]);
+                    if (r.ok) close(); else setArmed(false);
+                    return r;
+                  })}
+                  style={{
+                    border: '1px solid rgba(226,85,85,.5)', background: 'rgba(226,85,85,.12)',
+                    color: C.red, borderRadius: 10, padding: '11px 14px', fontSize: 12.5, cursor: 'pointer',
+                  }}
+                >
+                  Evet, sil
+                </button>
+                <button
+                  disabled={pending}
+                  onClick={() => setArmed(false)}
+                  style={{ ...ghostButton, padding: '11px 14px' }}
+                >
+                  Vazgeç
+                </button>
+              </span>
+            ) : (
+              <button
+                disabled={pending}
+                onClick={() => setArmed(true)}
+                style={{
+                  ...ghostButton, display: 'inline-flex', alignItems: 'center', gap: 6,
+                  borderColor: 'rgba(226,85,85,.35)', color: C.red,
+                }}
+              >
+                <Trash2 size={13} /> Sil
+              </button>
+            )
+          )}
         </div>
 
         {/* ---- activity ---- */}

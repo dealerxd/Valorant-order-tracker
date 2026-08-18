@@ -143,6 +143,44 @@ export async function archive(ids: string[]): Promise<ActionResult> {
   }
 }
 
+/** Permanently delete orders — for jobs opened by mistake. Archiving hides a
+    row; this removes it. The five child tables (order_finance, tracker_state,
+    tracker_matches, resell_comments, order_activity) are all ON DELETE
+    CASCADE, so they go with it.
+
+    The subtlety worth keeping: RLS rejects a forbidden DELETE **silently** —
+    Postgres reports success with zero rows affected, not an error. Without
+    `.select('id')` and a count check this would look like it worked. The old
+    panel learned this the hard way; see panel/js/orders.js deleteRecord.
+
+    The booster policy allows deleting only their own unpaid, finance-free
+    orders (`siparis_booster_sil`); an admin may delete anything. */
+export async function deleteOrders(ids: string[]): Promise<ActionResult> {
+  await requireUser();
+  if (!ids.length) return ok;
+  const sb = await createClient();
+
+  try {
+    const { data, error } = await sb.from('resells').delete().in('id', ids).select('id');
+    if (error) throw error;
+
+    const removed = (data || []).length;
+    if (removed < ids.length) {
+      return {
+        ok: false,
+        error: removed === 0
+          ? 'Silinemedi — bu iş ödenmiş ya da finans bilgisi girilmiş olabilir. Yöneticiye söyle.'
+          : `${ids.length} seçiliydi, ${removed} tanesi silindi. Kalanlar ödenmiş ya da finanslı.`,
+      };
+    }
+
+    refresh();
+    return ok;
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 /** Settle a payout period: record a `payouts` row per booster and flip `paid`
     on the completed orders it covers. */
 export async function payBoosters(

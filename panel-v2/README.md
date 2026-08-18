@@ -38,11 +38,16 @@ The project already exists and **builds green**: **`resell-bot-panel-v2`**
 
     https://resell-bot-panel-v2-git-1418a8-tepetarik213-gmailcoms-projects.vercel.app
 
-Every page currently answers `500 MIDDLEWARE_INVOCATION_FAILED` — that is the
-missing Supabase env vars and nothing else. What is left:
+It serves: `/login` answers 200 and `/overview` 307s to it for a signed-out
+visitor. The two public Supabase values ship in a committed
+`panel-v2/.env.production`, which Next.js reads at build time; anything set in
+the Vercel dashboard still overrides it, since `.env` files never clobber a
+variable already present in `process.env`.
 
-1. Add the environment variables below in the Vercel dashboard, for
-   Production *and* Preview. Nothing else blocks a working deploy.
+Remaining:
+
+1. Add the real secrets (`SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`) in the
+   dashboard — only `/api/*` needs them, the panel boots without.
 2. Production tracks `main`, which has no `panel-v2/` until PR #7 merges.
    Until then only `panel-v2`-branch previews build; a production deploy
    would fail with "root directory does not exist".
@@ -134,7 +139,6 @@ lib/
   model.ts            view-model types + every derived value (client-safe)
   orders.ts           queries and row -> view mapping  <- from sb-store.js
   actions.ts          all mutations, as server actions
-  domain.ts           games, ladders, statuses, Valorant elo arithmetic
   pricing.ts          step prices, payout and quote calculators
   parse.ts            marketplace paste parser
   ui.ts               design tokens and inline style helpers
@@ -247,6 +251,29 @@ shared order exists, so nothing changes visually until you create one.
 "mark TZX paid" flag, so it accrues forever. Making it settle like booster
 payouts do needs one boolean on `resells` (mirroring `vendor_paid`) plus a
 row in the Payments table — say the word and it is a small change.
+
+## Deleting an order
+
+Archiving hides a job; **deleting** removes it, for one opened by mistake. It
+lives in the order drawer as a red *Sil* button that arms on the first click
+and only fires on the second — there is no undo. All five child tables
+(`order_finance`, `tracker_state`, `tracker_matches`, `resell_comments`,
+`order_activity`) are `ON DELETE CASCADE`, so nothing is orphaned.
+
+The button shows for an admin always, and for a booster only while the job is
+unpaid — mirroring the old panel and the `siparis_booster_sil` policy, which
+permits a booster to delete only their own order when `paid = false` and it
+has no `order_finance` row.
+
+**The trap:** RLS rejects a forbidden `DELETE` *silently*. Postgres reports
+success with zero rows affected rather than raising — so a delete that was
+denied looks exactly like one that worked. `deleteOrders()` therefore issues
+`.select('id')` and compares the returned count against what was asked for,
+reporting the difference. Do not "simplify" that away. The old panel hit this
+in production; see `panel/js/orders.js` → `deleteRecord`.
+
+As of writing, every row in the database is either paid or carries finance, so
+**no** order is booster-deletable today — only an admin can remove one.
 
 ## The shared contract
 
