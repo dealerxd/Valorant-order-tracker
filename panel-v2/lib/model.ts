@@ -30,6 +30,10 @@ export interface Order {
   /** Role of whoever is doing the job, null when nobody is assigned or it
       went to an outside panel. Decides who owns the profit — see below. */
   doerRole: Role | null;
+  /** Kendi satıcı hesabımız (HILL / MAJORSTORE / ELOFARM) — paranın fiziken
+      nerede durduğunu gösterir. Kâr sahipliğiyle ilgisi yok. */
+  accountId: number | null;
+  accountName: string;
   /** Whether this order falls inside the partnership era. Frozen per order
       at read time from the partnership start date; false for everything
       that predates the partnership. */

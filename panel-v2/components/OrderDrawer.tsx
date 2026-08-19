@@ -207,6 +207,12 @@ export function OrderDrawer({
               <span>marketplace</span>
               <span style={{ color: C.gold }}>{o.platform}{ext ? ` → ${o.vendor}` : ''}</span>
             </div>
+            {o.accountName && (
+              <div style={rowBetween}>
+                <span>hesap</span>
+                <span style={{ color: C.text }}>{o.accountName}</span>
+              </div>
+            )}
             <div style={rowBetween}><span>region</span><span style={{ color: C.text }}>{o.region}</span></div>
             <div style={rowBetween}><span>starting RR</span><span style={{ color: C.text }}>{o.startRR} RR</span></div>
             <div style={rowBetween}>

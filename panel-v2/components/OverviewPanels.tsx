@@ -132,6 +132,65 @@ export function GameBreakdownCard({ stats, showFinance }: { stats: GameStat[]; s
   );
 }
 
+export interface AccountStat {
+  name: string;
+  jobs: number;
+  /** Bu hesapta biriken net gelir. */
+  net: number;
+  profit: number;
+  mine: number;
+  partner: number;
+}
+
+/** Hangi satıcı hesabımızda ne birikti.
+
+    Bu bir bakiye DEFTERİ değil: para çekme/aktarma hareketleri tutulmuyor,
+    dolayısıyla "şu an hesapta şu kadar var" demiyor. Gösterdiği şey, o
+    hesaba düşmüş siparişlerden bugüne kadar biriken kazanç. Defter sonraki
+    aşamada; o yüzden başlık da "biriken" diyor, "bakiye" değil. */
+export function AccountsCard({ stats, showSplit }: { stats: AccountStat[]; showSplit: boolean }) {
+  return (
+    <div style={cardStyle}>
+      <div style={panelHeading}><span style={headingBar(C.gold)} />Eldorado hesapları</div>
+      <div style={{ fontSize: 11, color: C.muted, marginTop: -8, marginBottom: 12 }}>
+        biriken kazanç · para çekme hareketleri henüz tutulmuyor
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {stats.length === 0 && (
+          <div style={{ fontSize: 12.5, color: C.muted }}>Henüz hesap seçilmiş sipariş yok.</div>
+        )}
+        {stats.map((a) => (
+          <div key={a.name} style={{
+            background: C.surface1, border: `1px solid ${C.border}`,
+            borderRadius: 11, padding: '12px 14px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ fontFamily: FONT_DISPLAY, fontSize: 14, letterSpacing: '.5px' }}>{a.name}</span>
+              <span style={{ fontSize: 11.5, color: C.muted, marginLeft: 'auto' }}>{a.jobs} iş</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11.5, color: C.muted }}>
+              <span>kalan kâr</span>
+              <b style={{ fontFamily: FONT_DISPLAY, fontSize: 15, color: a.profit < 0 ? C.red : C.green }}>
+                {TL(a.profit)}
+              </b>
+            </div>
+            {showSplit && a.partner !== 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 11.5, color: C.muted }}>
+                <span>sen / ortak</span>
+                <span>
+                  <b style={{ fontFamily: FONT_DISPLAY, color: C.green }}>{TL(a.mine)}</b>
+                  <span style={{ color: C.faint }}> · </span>
+                  <b style={{ fontFamily: FONT_DISPLAY, color: C.blue }}>{TL(a.partner)}</b>
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export interface FeedEntry {
   text: string;
   time: string;

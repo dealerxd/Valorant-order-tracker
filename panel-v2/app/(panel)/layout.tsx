@@ -17,7 +17,7 @@ export default async function PanelLayout({
   const data = await loadPanel();
   if (!data) redirect('/login');
 
-  const { orders, boosters, notifs, me, isAdmin, pricing, fx } = data;
+  const { orders, boosters, notifs, me, isAdmin, pricing, fx, accounts } = data;
 
   const open = orders.filter((o) => o.status !== 'tamam').length;
   const boosterDebt = boosters.reduce((a, b) => a + b.debt, 0);
@@ -51,6 +51,7 @@ export default async function PanelLayout({
             isAdmin={isAdmin}
             pricing={pricing}
             defaultRate={Math.round(fx.USD ?? 41)}
+            accounts={accounts}
           />
           {children}
         </div>

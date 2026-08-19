@@ -364,6 +364,8 @@ export interface NewOrderInput {
   vcost: number;
   vcur: Currency;
   vpaid: boolean;
+  /** Kendi satıcı hesabımız (HILL / MAJORSTORE / ELOFARM). */
+  accountId: number | null;
   /** Booster fee in TL, computed from the price list. */
   payout: number;
 }
@@ -400,6 +402,8 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult & 
       // Platform lives on the order now (migration 007): it decides who can
       // see the row, so it has to be set before any finance row exists.
       platform: input.platform || 'Other',
+      // Paranin fiziken hangi hesapta biriktigi. Kar sahipligini etkilemez.
+      account_id: input.accountId,
     };
 
     const { data, error } = await sb.from('resells').insert(row).select('id').single();

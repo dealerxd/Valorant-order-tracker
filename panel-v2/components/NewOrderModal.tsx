@@ -34,6 +34,8 @@ interface Draft {
   vcost: string;
   vcur: Currency;
   vpaid: boolean;
+  /** Kendi satıcı hesabımız; '' = seçilmedi. */
+  accountId: string;
 }
 
 const emptyDraft = (rate: number): Draft => ({
@@ -41,6 +43,7 @@ const emptyDraft = (rate: number): Draft => ({
   region: 'TR', startRR: '0', riotId: '', platform: '', cost: '', cur: '$',
   feePct: '10', rate: String(rate), boosterId: '', extras: [],
   fulfil: 'internal', vendor: '', vcost: '', vcur: '$', vpaid: false,
+  accountId: '',
 });
 
 export function NewOrderButton(props: {
@@ -48,6 +51,7 @@ export function NewOrderButton(props: {
   isAdmin: boolean;
   pricing: PricingTables;
   defaultRate: number;
+  accounts: { id: number; name: string; platform: string }[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -59,12 +63,13 @@ export function NewOrderButton(props: {
 }
 
 function NewOrderModal({
-  boosters, isAdmin, pricing, defaultRate, onClose,
+  boosters, isAdmin, pricing, defaultRate, accounts, onClose,
 }: {
   boosters: { id: string; name: string }[];
   isAdmin: boolean;
   pricing: PricingTables;
   defaultRate: number;
+  accounts: { id: number; name: string; platform: string }[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -79,6 +84,9 @@ function NewOrderModal({
   const game = G(f.game);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setF((d) => ({ ...d, [k]: v }));
+
+  // Hesaplar pazaryerine bagli: Eldorado siparisine GameBoost hesabi secilemesin.
+  const platformAccounts = accounts.filter((a) => a.platform === f.platform);
 
   const parsed = useMemo(() => parsePaste(paste), [paste]);
   const chips = useMemo(() => parsedChips(parsed), [parsed]);
@@ -135,6 +143,7 @@ function NewOrderModal({
       vcost: Number(f.vcost) || 0,
       vcur: f.vcur,
       vpaid: f.vpaid,
+      accountId: f.accountId ? Number(f.accountId) : null,
       payout,
     };
 
@@ -295,6 +304,18 @@ function NewOrderModal({
                 <select value={f.platform} onChange={(e) => set('platform', e.target.value)} style={inputStyle}>
                   <option value="">— select —</option>
                   {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </Field>
+
+              <Field label="Hesap">
+                <select
+                  value={f.accountId}
+                  onChange={(e) => set('accountId', e.target.value)}
+                  style={inputStyle}
+                  disabled={!platformAccounts.length}
+                >
+                  <option value="">{platformAccounts.length ? '— seç —' : '— hesap yok —'}</option>
+                  {platformAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </Field>
 

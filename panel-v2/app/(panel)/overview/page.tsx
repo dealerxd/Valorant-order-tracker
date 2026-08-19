@@ -2,8 +2,8 @@ import { redirect } from 'next/navigation';
 import { GameFilter } from '@/components/GameFilter';
 import { KpiCard } from '@/components/KpiCard';
 import {
-  AlertsCard, FeedCard, FunnelCard, GameBreakdownCard,
-  type Alert, type FeedEntry, type GameStat,
+  AccountsCard, AlertsCard, FeedCard, FunnelCard, GameBreakdownCard,
+  type AccountStat, type Alert, type FeedEntry, type GameStat,
 } from '@/components/OverviewPanels';
 import {
   loadPanel, adminShare, averageTurnaround, costTL, grossRevenue, isExternal,
@@ -96,6 +96,19 @@ export default async function OverviewPage({
 
   const feed: FeedEntry[] = buildFeed(orders);
 
+  // Hangi satici hesabimizda ne birikti. Hesabi olmayan siparisler disarida.
+  const byAccount = new Map<string, AccountStat>();
+  orders.filter((o) => o.accountName && o.cost > 0).forEach((o) => {
+    const a = byAccount.get(o.accountName) ?? { name: o.accountName, jobs: 0, net: 0, profit: 0, mine: 0, partner: 0 };
+    a.jobs += 1;
+    a.net += netRevenue(o);
+    a.profit += profit(o);
+    a.mine += adminShare(o);
+    a.partner += partnerShare(o);
+    byAccount.set(o.accountName, a);
+  });
+  const accountStats = [...byAccount.values()].sort((a, b) => b.profit - a.profit);
+
   return (
     <>
       <GameFilter counts={gameCounts} />
@@ -112,6 +125,9 @@ export default async function OverviewPage({
               avgDelivery={avgDelivery}
             />
             <AlertsCard alerts={alerts} />
+            {isAdmin && accountStats.length > 0 && (
+              <AccountsCard stats={accountStats} showSplit={partners !== 0} />
+            )}
             <GameBreakdownCard stats={gameStats} showFinance={isAdmin} />
             <FeedCard feed={feed} />
           </div>

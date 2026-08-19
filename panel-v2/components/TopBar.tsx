@@ -11,7 +11,7 @@ import type { PricingTables } from '@/lib/pricing';
 import { C, FONT_DISPLAY } from '@/lib/ui';
 
 export function TopBar({
-  titles, notifs, boosters, isAdmin, pricing, defaultRate,
+  titles, notifs, boosters, isAdmin, pricing, defaultRate, accounts,
 }: {
   /** section -> [title, subtitle]. The subtitle counts what is on screen. */
   titles: Record<string, [string, string]>;
@@ -20,6 +20,7 @@ export function TopBar({
   isAdmin: boolean;
   pricing: PricingTables;
   defaultRate: number;
+  accounts: { id: number; name: string; platform: string }[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -69,6 +70,7 @@ export function TopBar({
           isAdmin={isAdmin}
           pricing={pricing}
           defaultRate={defaultRate}
+          accounts={accounts}
         />
       </div>
     </div>

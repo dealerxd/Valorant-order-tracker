@@ -29,6 +29,14 @@ export * from './model';
 
 const OUT_RX = /#outsourced\s+([^|\n]*)\|([0-9.]*)\|([^|\n]*)\|([01])/;
 
+export interface MarketAccount {
+  id: number;
+  name: string;
+  platform: string;
+  active: boolean;
+  sort: number;
+}
+
 export interface PanelData {
   me: Profile;
   isAdmin: boolean;
@@ -36,6 +44,8 @@ export interface PanelData {
   boosters: Booster[];
   notifs: Notif[];
   pricing: PricingTables;
+  /** Kendi satıcı hesaplarımız. Çalışanda boş döner (RLS). */
+  accounts: MarketAccount[];
   /** Latest USD/EUR -> TRY rates, written by /api/fx. */
   fx: Record<string, number>;
   syncedAt: string;
@@ -68,6 +78,8 @@ interface ResellRow {
   vendor_paid: boolean | null;
   /** Marketplace, now stored on the order itself — see migration 007. */
   platform: string | null;
+  /** Kendi satıcı hesabımız — migration 009. */
+  account_id: number | null;
   /* Real lifecycle timestamps the database already keeps — preferred over
      guessing from created_at. */
   assigned_at: string | null;
@@ -126,6 +138,7 @@ function mapOrder(
   now: number,
   /** Ortakligin basladigi an; oncesi kosulsuz %100 reXs'in. */
   partnershipSince: number | null,
+  accounts: Record<number, string>,
 ): Order {
   const fin = f ?? ({} as FinanceRow);
   const note = r.note || '';
@@ -180,6 +193,8 @@ function mapOrder(
     boosterId: r.booster_id || null,
     // Who actually did it decides who owns the Eldorado profit.
     doerRole: r.booster_id && profiles[r.booster_id] ? profiles[r.booster_id].role : null,
+    accountId: r.account_id ?? null,
+    accountName: r.account_id ? (accounts[r.account_id] ?? '') : '',
     sharedProfit:
       (r.platform || fin.platform) === 'Eldorado'
       && partnershipSince != null
@@ -357,7 +372,7 @@ export const loadPanel = cache(async (): Promise<PanelData | null> => {
   if (!me) return null;
   const isAdmin = me.role === 'admin';
 
-  const [oRes, pRes, fRes, tRes, aRes, cRes, priceRes, fxRes] = await Promise.all([
+  const [oRes, pRes, fRes, tRes, aRes, cRes, priceRes, accRes, fxRes] = await Promise.all([
     sb.from('resells').select('*').eq('archived', false).order('created_at', { ascending: false }),
     sb.from('profiles').select('*').order('display_name'),
     // RLS already hides this from boosters; skipping the request saves a hop.
@@ -366,6 +381,8 @@ export const loadPanel = cache(async (): Promise<PanelData | null> => {
     sb.from('order_activity').select('order_id,kind,text,created_at,actor_id').order('created_at', { ascending: false }).limit(400),
     sb.from('resell_comments').select('order_id,author_id,body,created_at').order('created_at', { ascending: false }).limit(400),
     sb.from('pricing').select('*'),
+    // RLS bunu calisana vermiyor; onlarda bos donuyor ve isim bos kaliyor.
+    sb.from('market_accounts').select('id,name,platform,active,sort').order('sort'),
     // fx_rates is the tracker bot's daily write — the panel is a reader.
     sb.from('fx_rates').select('currency,rate,as_of').order('as_of', { ascending: false }),
   ]);
@@ -410,9 +427,13 @@ export const loadPanel = cache(async (): Promise<PanelData | null> => {
     if (fx[row.currency] == null) fx[row.currency] = Number(row.rate);
   });
 
+  const accountRows = (accRes.data as MarketAccount[]) || [];
+  const accounts: Record<number, string> = {};
+  accountRows.forEach((a) => { accounts[a.id] = a.name; });
+
   const now = Date.now();
   const orders = ((oRes.data as ResellRow[]) || []).map((r) =>
-    mapOrder(r, profiles, finance[r.id], tracker[r.id], activity[r.id], comments[r.id], isAdmin, now, partnershipSince));
+    mapOrder(r, profiles, finance[r.id], tracker[r.id], activity[r.id], comments[r.id], isAdmin, now, partnershipSince, accounts));
 
   return {
     me,
@@ -421,6 +442,7 @@ export const loadPanel = cache(async (): Promise<PanelData | null> => {
     boosters: mapBoosters(profiles, orders),
     notifs: mapNotifs(orders, isAdmin),
     pricing,
+    accounts: accountRows,
     fx,
     syncedAt: new Date(now).toISOString(),
   };
