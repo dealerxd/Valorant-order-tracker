@@ -20,10 +20,9 @@ and publishable key are already filled in — the rest are secrets you supply:
 
 | Variable | Needed for |
 |---|---|
-| `SUPABASE_SERVICE_ROLE_KEY` | `/api/fx` and the ingest routes (server only) |
+| `SUPABASE_SERVICE_ROLE_KEY` | the `/api/fx` cron (server only) |
 | `CRON_SECRET` | guards every `/api/*` route against public calls |
 | `FX_API_KEY` | optional — without it `/api/fx` uses the keyless open.er-api.com |
-| `ELDORADO_API_KEY`, `GAMEBOOST_API_KEY` | marketplace ingest (see *Not wired up*) |
 | `TRACK_LINK_SECRET` | HMAC for the customer `/track/[token]` links (surface not built) |
 
 ## Deploying to Vercel
@@ -66,15 +65,10 @@ client bundle at build time, so a deploy without them builds green and then
 500s on every page. They are not secrets (the anon key is the publishable
 one, already in `.env.example` and the prototype).
 
-`ELDORADO_API_KEY` / `GAMEBOOST_API_KEY` are pointless until the ingest routes
-are implemented; they return 501 regardless.
-
 ### Cron
 
-`vercel.json` schedules **only** `/api/fx`, daily. The two marketplace ingest
-crons were removed: those endpoints return 501, so scheduling them just burns
-invocations — and three crons at `*/15` exceeds the Hobby plan's limit (2 jobs,
-once-daily), which fails the deploy outright. Add them back with the ingest.
+`vercel.json` schedules **only** `/api/fx`, daily. (More crons would also hit
+the Hobby plan's limit — 2 jobs, once-daily — which fails the deploy outright.)
 
 ## The migration — already applied
 
@@ -132,7 +126,7 @@ app/
     orders/[id]/      full page on a direct load
     @drawer/(.)orders/[id]/   intercepted — renders the drawer over /orders
   login/
-  api/fx/ api/ingest/{eldorado,gameboost}/
+  api/fx/
 lib/
   domain.generated.ts GENERATED from shared/domain.json — do not edit
   domain.ts           games/regions/statuses; re-exports the generated contract
@@ -183,18 +177,13 @@ Immortal 1 base, Radiant is 27. **If `ranks.py` changes, change this too.**
 Two things in the handoff are deliberately unfinished, and both fail loudly
 rather than pretending to work:
 
-- **Marketplace ingest.** `/api/ingest/eldorado` and `/api/ingest/gameboost`
-  return 501. The insert half is finished in `app/api/ingest/_shared.ts` —
-  it writes the `resells` + `order_finance` pair, deduplicates on
-  `order_finance.platform_ref` so re-runs are safe, and logs an activity row.
-  What is missing is the fetch. Eldorado has no public seller API. GameBoost's
-  documented v2 API (`api.gameboost.com/v2`, Bearer auth) covers account,
-  currency, item and gift-card orders — it has no endpoint for *boosting
-  service* orders, which is the only kind this panel tracks. Either a
-  partner endpoint outside the public docs is needed, or the
-  `*-order-purchased` webhook should be used instead of a poll. Until then
-  the New Order paste parser is the working path, which is what it was
-  built for.
+- **Marketplace ingest was removed** (formerly `/api/ingest/*`, always 501).
+  Eldorado has no public seller API, and GameBoost's documented v2 API has no
+  endpoint for *boosting service* orders — so the routes could never fetch
+  anything and the workflow settled on manual entry, with the paste parser
+  filling the form from marketplace text. The finished upsert plumbing
+  (dedup on `order_finance.platform_ref`) is in git history if an API ever
+  appears.
 - **Customer `/track/[token]` and booster `/apply` pages.** Not designed yet,
   per the handoff. The `track_token` column exists so links can be minted
   when the design lands.
@@ -202,56 +191,41 @@ rather than pretending to work:
 The drawer's **Edit** button is also inert — the handoff lists it but does not
 specify the edit form.
 
-## Ownership split (reXs / TZX)
+## Eldorado profit & the shared pool
 
-Orders divide two ways by who shares the profit:
+GameBoost profit is wholly reXs'. Eldorado profit follows **who actually did
+the job** (`Order.doerRole`):
 
-| Bucket | Remaining profit |
+| Doer | Remaining profit |
 |---|---|
-| wholly yours | 100% reXs |
-| shared | 50% reXs / 50% TZX |
+| reXs himself | 100% reXs |
+| the partner (ortak) himself | 100% ortak |
+| anyone else — employee or outside resell | 50 / 50 |
 
-"Remaining profit" is `netRevenue − costTL`: the marketplace commission and
-whoever fulfilled the job (own booster payout, or the outsourced seller's
-amount converted to TL) are both already out. A loss splits the same way a
-gain does.
+"Remaining profit" is `netRevenue − costTL`. Two guards:
 
-**The partnership is stored on the order** (`resells.partner`,
-`resells.partner_pct`), not derived from the marketplace. That matters:
+- **Partnership boundary.** Orders created before the partnership start
+  (`pricing` row `partnership`) are unconditionally 100% reXs' — the rule
+  never rewrites history. The boundary is set once and must not be moved;
+  moving it re-attributes old money.
+- Inside the boundary ownership stays **derived**, so reassigning a job
+  corrects the split automatically instead of leaving a stale stored value.
 
-- Every order that existed when this shipped predates the TZX deal, so all
-  of them — including the three historic Eldorado jobs — stay 100% yours.
-  Deriving from the marketplace would have retroactively handed TZX half of
-  ₺1.127.
-- The percentage is frozen on the row, so renegotiating the split later
-  cannot rewrite what past orders were worth.
+Read it with `profitOwner()` / `adminShare()` / `partnerShare()` in
+`lib/model.ts`.
 
-`PARTNER_DEFAULTS` in `lib/model.ts` maps a marketplace to the partnership
-the **New Order form pre-selects** (Eldorado → TZX 50%). It never
-reinterprets a stored order, and the admin can override or clear it per
-order — once touched by hand, changing the marketplace stops overwriting it.
-Boosters cannot set it at all.
+**Where the money physically sits is a separate axis.** `resells.account_id`
+records which of our Eldorado seller accounts (HILL / MAJORSTORE / ELOFARM,
+`market_accounts`) the order landed on; `resells.resell_account_id` records
+which account an outside resell was paid from; `resells.customer_discord`
+holds the customer's Discord if added. The Overview "Eldorado hesapları"
+card shows per-account movement, balanced per account as
 
-Read it with `partnerOf()` / `partnerShare()` / `ownProfit()`. Where it
-surfaces:
+    gelen − giden = sen + ortak + maliyet karşılığı
 
-- **Overview** — `Net Profit` is now *your* share, with a separate `TZX Share`
-  KPI, plus an **Ownership** panel breaking the two buckets out.
-- **Orders** — a partner filter (All / 100% you / TZX shared), and the Profit
-  column shows your share with TZX's cut on the line beneath.
-- **New Order** — a *Profit share* control, seeded from the marketplace, with
-  the split shown live in the summary.
-- **Drawer** — the Finance card shows remaining profit → TZX cut → yours.
-- **Payments** — the footer carries TZX's accrued share.
-
-The Ownership panel and the Orders filter stay hidden until at least one
-shared order exists, so nothing changes visually until you create one.
-
-**Not settled anywhere yet.** The TZX figure is reporting only; there is no
-"mark TZX paid" flag, so it accrues forever. Making it settle like booster
-payouts do needs one boolean on `resells` (mirroring `vendor_paid`) plus a
-row in the Payments table — say the word and it is a small change.
-
+It is deliberately **not** a ledger: withdrawals/deposits are not tracked
+yet, and the card says so. When a real ledger is wanted, add a movements
+table — not a balance column.
 ## Deleting an order
 
 Archiving hides a job; **deleting** removes it, for one opened by mistake. It

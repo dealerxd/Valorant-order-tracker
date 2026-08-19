@@ -1,7 +1,7 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 
-/** Service-role client — bypasses RLS. Only for cron and ingest routes that
+/** Service-role client — bypasses RLS. Only for cron routes (/api/fx) that
     run without a user session. Never import this from a component. */
 export function createAdminClient() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

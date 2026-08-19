@@ -1,8 +1,9 @@
 /* Marketplace paste parser.
 
    The regex set is kept from the prototype's parsePaste() — it is tuned to
-   real Eldorado / GameBoost wording. It stays useful as a fallback after the
-   API ingest lands, so treat these patterns as data, not as scratch code. */
+   real Eldorado / GameBoost wording. Orders are entered by hand (neither
+   marketplace exposes a usable API), so pasting the listing text and letting
+   this fill the form IS the fast path; treat the patterns as data. */
 
 import { EXTRAS, G, normalizeRegion, type GameKey } from './domain';
 

@@ -7,9 +7,9 @@ import 'server-only';
    to Supabase.
 
    Changes from the prototype's data layer:
-   - Outsourcing reads from the real vendor / vendor_cost / vendor_currency /
-     vendor_paid columns. OUT_RX stays only as a fallback for rows written
-     before the migration backfilled them.
+   - Outsourcing reads the real vendor / vendor_cost / vendor_currency /
+     vendor_paid columns. (The prototype's "#outsourced" note-tag never made
+     it into this database — zero rows carried it — so its parser is gone.)
    - Activity comes from order_activity. deriveActivity() is kept as the
      fallback for orders that predate that table.
    - Every read is scoped by RLS, so boosters get an empty order_finance set
@@ -19,7 +19,7 @@ import { cache } from 'react';
 import { createClient } from './supabase/server';
 import {
   CUR, G, GAME_KEYS, GAMES, rankFromElo,
-  type Currency, type GameKey, type OrderType, type Status,
+  type GameKey, type OrderType, type Status,
 } from './domain';
 import { DAY, ago, shortDate } from './format';
 import { unnest, type PricingTables } from './pricing';
@@ -27,7 +27,6 @@ import type { ActivityEntry, Booster, Notif, Order, Profile } from './model';
 
 export * from './model';
 
-const OUT_RX = /#outsourced\s+([^|\n]*)\|([0-9.]*)\|([^|\n]*)\|([01])/;
 
 export interface MarketAccount {
   id: number;
@@ -146,11 +145,7 @@ function mapOrder(
   const fin = f ?? ({} as FinanceRow);
   const note = r.note || '';
 
-  // Prefer the real columns; fall back to the legacy note tag for rows the
-  // migration has not touched.
-  const legacy = OUT_RX.exec(note);
-  const hasVendorCol = !!(r.vendor && r.vendor.trim());
-  const external = hasVendorCol || !!legacy;
+  const external = !!(r.vendor && r.vendor.trim());
 
   // resells.game already stores the contract's ids, so there is nothing to
   // translate — only guard against a value the contract does not know.
@@ -207,14 +202,10 @@ function mapOrder(
       && created != null
       && new Date(created).getTime() >= partnershipSince,
     fulfil: external ? 'external' : 'internal',
-    vendor: hasVendorCol ? r.vendor!.trim() : legacy ? legacy[1].trim() : '',
-    vcost: hasVendorCol ? Number(r.vendor_cost) || 0 : legacy ? Number(legacy[2]) || 0 : 0,
-    vcur: hasVendorCol
-      ? (CUR[(r.vendor_currency as 'USD' | 'EUR' | 'TRY') || 'USD'] || '$')
-      : legacy
-        ? ((legacy[3].trim() || '$') as Currency)
-        : '$',
-    vpaid: hasVendorCol ? !!r.vendor_paid : legacy ? legacy[4] === '1' : false,
+    vendor: external ? r.vendor!.trim() : '',
+    vcost: external ? Number(r.vendor_cost) || 0 : 0,
+    vcur: external ? (CUR[(r.vendor_currency as 'USD' | 'EUR' | 'TRY') || 'USD'] || '$') : '$',
+    vpaid: external ? !!r.vendor_paid : false,
     status: (r.durum === 'odendi' ? 'tamam' : (r.durum || 'yeni')) as Status,
     cost: Number(fin.cost) || 0,
     cur,
@@ -234,7 +225,7 @@ function mapOrder(
     late,
     tracked,
     matches: [],
-    noteText: note.replace(OUT_RX, '').trim(),
+    noteText: note.trim(),
     activity: [],
     financeHidden: !isAdmin,
   };
