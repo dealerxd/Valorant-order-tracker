@@ -366,6 +366,10 @@ export interface NewOrderInput {
   vpaid: boolean;
   /** Kendi satıcı hesabımız (HILL / MAJORSTORE / ELOFARM). */
   accountId: number | null;
+  /** Resell ödemesinin çıktığı hesap; null = hesap dışı (Discord vb.). */
+  resellAccountId: number | null;
+  /** Müşterinin Discord adı; boş = eklemedik. */
+  customerDiscord: string;
   /** Booster fee in TL, computed from the price list. */
   payout: number;
 }
@@ -404,6 +408,9 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult & 
       platform: input.platform || 'Other',
       // Paranin fiziken hangi hesapta biriktigi. Kar sahipligini etkilemez.
       account_id: input.accountId,
+      // Resell hesabi yalnizca disariya verilen iste anlamli.
+      resell_account_id: external ? input.resellAccountId : null,
+      customer_discord: input.customerDiscord.trim() || null,
     };
 
     const { data, error } = await sb.from('resells').insert(row).select('id').single();

@@ -80,6 +80,9 @@ interface ResellRow {
   platform: string | null;
   /** Kendi satıcı hesabımız — migration 009. */
   account_id: number | null;
+  /** Resell'in çıktığı hesap + müşteri Discord'u — migration 010. */
+  resell_account_id: number | null;
+  customer_discord: string | null;
   /* Real lifecycle timestamps the database already keeps — preferred over
      guessing from created_at. */
   assigned_at: string | null;
@@ -195,6 +198,9 @@ function mapOrder(
     doerRole: r.booster_id && profiles[r.booster_id] ? profiles[r.booster_id].role : null,
     accountId: r.account_id ?? null,
     accountName: r.account_id ? (accounts[r.account_id] ?? '') : '',
+    resellAccountId: r.resell_account_id ?? null,
+    resellAccountName: r.resell_account_id ? (accounts[r.resell_account_id] ?? '') : '',
+    customerDiscord: (r.customer_discord ?? '').trim(),
     sharedProfit:
       (r.platform || fin.platform) === 'Eldorado'
       && partnershipSince != null

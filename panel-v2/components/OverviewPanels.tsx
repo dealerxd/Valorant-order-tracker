@@ -134,58 +134,87 @@ export function GameBreakdownCard({ stats, showFinance }: { stats: GameStat[]; s
 
 export interface AccountStat {
   name: string;
+  /** Bu hesaba düşen sipariş sayısı. */
   jobs: number;
-  /** Bu hesapta biriken net gelir. */
-  net: number;
-  profit: number;
+  /** + gelen: bu hesaba düşen siparişlerin net geliri (komisyon sonrası). */
+  inTl: number;
+  /** − giden: bu hesaptan çıkan resell ödemeleri. */
+  outTl: number;
+  /** Kârdan sana / ortağa düşen (bu hesaba gelen siparişlerden). */
   mine: number;
   partner: number;
+  /** Gelenin kâr olmayan kısmı: booster ücretlerine ayrılan ya da başka
+      hesaptan/hesap dışından yapılmış resell ödemesini karşılayan para. */
+  costPool: number;
 }
 
-/** Hangi satıcı hesabımızda ne birikti.
+/** Ortak veri havuzu: hesap başına para hareketi ve kimin parası.
 
-    Bu bir bakiye DEFTERİ değil: para çekme/aktarma hareketleri tutulmuyor,
-    dolayısıyla "şu an hesapta şu kadar var" demiyor. Gösterdiği şey, o
-    hesaba düşmüş siparişlerden bugüne kadar biriken kazanç. Defter sonraki
-    aşamada; o yüzden başlık da "biriken" diyor, "bakiye" değil. */
-export function AccountsCard({ stats, showSplit }: { stats: AccountStat[]; showSplit: boolean }) {
+    Bakiye DEFTERİ değil: para çekme/yatırma hareketleri tutulmuyor, o yüzden
+    "şu an hesapta şu kadar var" demiyor — sipariş akışından türeyen hareketi
+    gösteriyor. Matematik hesap başına dengede:
+
+        gelen − giden = sen + ortak + maliyet karşılığı
+
+    "Maliyet karşılığı" gelenin kâr olmayan kısmı: booster'a ödenecek ücret,
+    ya da resell ödemesi başka hesaptan/hesap dışından çıktıysa onu
+    karşılayan pay. Kimseye bölüştürülmüyor çünkü kâr değil, gider parası. */
+export function AccountsCard({ stats }: { stats: AccountStat[] }) {
   return (
     <div style={cardStyle}>
       <div style={panelHeading}><span style={headingBar(C.gold)} />Eldorado hesapları</div>
       <div style={{ fontSize: 11, color: C.muted, marginTop: -8, marginBottom: 12 }}>
-        biriken kazanç · para çekme hareketleri henüz tutulmuyor
+        sipariş hareketlerinden hesaplanır · para çekme/yatırma henüz tutulmuyor
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {stats.length === 0 && (
           <div style={{ fontSize: 12.5, color: C.muted }}>Henüz hesap seçilmiş sipariş yok.</div>
         )}
-        {stats.map((a) => (
-          <div key={a.name} style={{
-            background: C.surface1, border: `1px solid ${C.border}`,
-            borderRadius: 11, padding: '12px 14px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <span style={{ fontFamily: FONT_DISPLAY, fontSize: 14, letterSpacing: '.5px' }}>{a.name}</span>
-              <span style={{ fontSize: 11.5, color: C.muted, marginLeft: 'auto' }}>{a.jobs} iş</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11.5, color: C.muted }}>
-              <span>kalan kâr</span>
-              <b style={{ fontFamily: FONT_DISPLAY, fontSize: 15, color: a.profit < 0 ? C.red : C.green }}>
-                {TL(a.profit)}
-              </b>
-            </div>
-            {showSplit && a.partner !== 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 11.5, color: C.muted }}>
-                <span>sen / ortak</span>
-                <span>
-                  <b style={{ fontFamily: FONT_DISPLAY, color: C.green }}>{TL(a.mine)}</b>
-                  <span style={{ color: C.faint }}> · </span>
-                  <b style={{ fontFamily: FONT_DISPLAY, color: C.blue }}>{TL(a.partner)}</b>
-                </span>
+        {stats.map((a) => {
+          const net = a.inTl - a.outTl;
+          return (
+            <div key={a.name} style={{
+              background: C.surface1, border: `1px solid ${C.border}`,
+              borderRadius: 11, padding: '12px 14px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ fontFamily: FONT_DISPLAY, fontSize: 14, letterSpacing: '.5px' }}>{a.name}</span>
+                <span style={{ fontSize: 11.5, color: C.muted, marginLeft: 'auto' }}>{a.jobs} iş</span>
               </div>
-            )}
-          </div>
-        ))}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11.5, color: C.muted }}>
+                <span>+ gelen</span>
+                <b style={{ fontFamily: FONT_DISPLAY, color: C.green }}>{TL(a.inTl)}</b>
+              </div>
+              {a.outTl !== 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 11.5, color: C.muted }}>
+                  <span>− resell ödemesi</span>
+                  <b style={{ fontFamily: FONT_DISPLAY, color: C.red }}>−{TL(a.outTl)}</b>
+                </div>
+              )}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', marginTop: 6, paddingTop: 6,
+                borderTop: `1px solid ${C.border}`, fontSize: 11.5, color: C.muted,
+              }}>
+                <span>net hareket</span>
+                <b style={{ fontFamily: FONT_DISPLAY, fontSize: 15, color: net < 0 ? C.red : C.text }}>{TL(net)}</b>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11.5, color: C.muted }}>
+                <span>sen</span>
+                <b style={{ fontFamily: FONT_DISPLAY, color: C.green }}>{TL(a.mine)}</b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 11.5, color: C.muted }}>
+                <span>ortak</span>
+                <b style={{ fontFamily: FONT_DISPLAY, color: C.blue }}>{TL(a.partner)}</b>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, fontSize: 11.5, color: C.muted }}>
+                <span>maliyet karşılığı</span>
+                <b style={{ fontFamily: FONT_DISPLAY, color: C.text2 }}>{TL(a.costPool)}</b>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

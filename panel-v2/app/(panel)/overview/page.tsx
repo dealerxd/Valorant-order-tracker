@@ -96,18 +96,34 @@ export default async function OverviewPage({
 
   const feed: FeedEntry[] = buildFeed(orders);
 
-  // Hangi satici hesabimizda ne birikti. Hesabi olmayan siparisler disarida.
+  // Ortak veri havuzu: hesap basina hareket. Iki ayri akis var --
+  //   siparisin dustugu hesap (accountName)      -> +net gelir oraya
+  //   resell odemesinin ciktigi hesap (resell...) -> -maliyet oradan
+  // costPool = gelen icindeki kar olmayan kisim; bu hesaptan cikan resell
+  // odemeleri onu azaltiyor. Boylece hesap basina denge tutuyor:
+  //   gelen - giden = sen + ortak + maliyet karsiligi
   const byAccount = new Map<string, AccountStat>();
-  orders.filter((o) => o.accountName && o.cost > 0).forEach((o) => {
-    const a = byAccount.get(o.accountName) ?? { name: o.accountName, jobs: 0, net: 0, profit: 0, mine: 0, partner: 0 };
-    a.jobs += 1;
-    a.net += netRevenue(o);
-    a.profit += profit(o);
-    a.mine += adminShare(o);
-    a.partner += partnerShare(o);
-    byAccount.set(o.accountName, a);
+  const accOf = (name: string): AccountStat => {
+    const a = byAccount.get(name) ?? { name, jobs: 0, inTl: 0, outTl: 0, mine: 0, partner: 0, costPool: 0 };
+    byAccount.set(name, a);
+    return a;
+  };
+  orders.forEach((o) => {
+    if (o.accountName && o.cost > 0) {
+      const a = accOf(o.accountName);
+      a.jobs += 1;
+      a.inTl += netRevenue(o);
+      a.mine += adminShare(o);
+      a.partner += partnerShare(o);
+      a.costPool += costTL(o);
+    }
+    if (isExternal(o) && o.resellAccountName) {
+      const b = accOf(o.resellAccountName);
+      b.outTl += costTL(o);
+      b.costPool -= costTL(o);
+    }
   });
-  const accountStats = [...byAccount.values()].sort((a, b) => b.profit - a.profit);
+  const accountStats = [...byAccount.values()].sort((a, b) => (b.inTl - b.outTl) - (a.inTl - a.outTl));
 
   return (
     <>
@@ -125,8 +141,10 @@ export default async function OverviewPage({
               avgDelivery={avgDelivery}
             />
             <AlertsCard alerts={alerts} />
-            {isAdmin && accountStats.length > 0 && (
-              <AccountsCard stats={accountStats} showSplit={partners !== 0} />
+            {/* Ortak veri havuzu: admin ve ortak gorur; calisanda RLS
+                hesap listesini bosalttigi icin zaten hic olusmuyor. */}
+            {(isAdmin || data.me.role === 'ortak') && accountStats.length > 0 && (
+              <AccountsCard stats={accountStats} />
             )}
             <GameBreakdownCard stats={gameStats} showFinance={isAdmin} />
             <FeedCard feed={feed} />

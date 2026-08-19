@@ -34,6 +34,11 @@ export interface Order {
       nerede durduğunu gösterir. Kâr sahipliğiyle ilgisi yok. */
   accountId: number | null;
   accountName: string;
+  /** Resell ödemesinin çıktığı kendi hesabımız; null = resell yok / hesap dışı. */
+  resellAccountId: number | null;
+  resellAccountName: string;
+  /** Müşterinin Discord adı; boş = eklemedik. */
+  customerDiscord: string;
   /** Whether this order falls inside the partnership era. Frozen per order
       at read time from the partnership start date; false for everything
       that predates the partnership. */
@@ -227,6 +232,6 @@ export function filterOrders(orders: Order[], f: OrderFilters): Order[] {
     if (f.unpaid && (isExternal(o) ? o.vpaid : o.paid)) return false;
     if (f.nofinance && o.cost !== 0) return false;
     if (!q) return true;
-    return [routeOf(o), o.booster, o.vendor, o.riotId, o.platform].join(' ').toLowerCase().includes(q);
+    return [routeOf(o), o.booster, o.vendor, o.riotId, o.platform, o.accountName, o.resellAccountName, o.customerDiscord].join(' ').toLowerCase().includes(q);
   });
 }

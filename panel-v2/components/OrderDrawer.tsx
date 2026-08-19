@@ -213,6 +213,18 @@ export function OrderDrawer({
                 <span style={{ color: C.text }}>{o.accountName}</span>
               </div>
             )}
+            {o.resellAccountName && (
+              <div style={rowBetween}>
+                <span>resell hesabı</span>
+                <span style={{ color: C.text }}>{o.resellAccountName}</span>
+              </div>
+            )}
+            {o.customerDiscord && (
+              <div style={rowBetween}>
+                <span>müşteri discord</span>
+                <span style={{ color: C.blue }}>{o.customerDiscord}</span>
+              </div>
+            )}
             <div style={rowBetween}><span>region</span><span style={{ color: C.text }}>{o.region}</span></div>
             <div style={rowBetween}><span>starting RR</span><span style={{ color: C.text }}>{o.startRR} RR</span></div>
             <div style={rowBetween}>

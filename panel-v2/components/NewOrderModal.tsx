@@ -36,6 +36,10 @@ interface Draft {
   vpaid: boolean;
   /** Kendi satıcı hesabımız; '' = seçilmedi. */
   accountId: string;
+  /** Resell'in çıktığı hesap; '' = hesap dışı (Discord vb.). */
+  resellAccountId: string;
+  /** Müşterinin Discord adı; boş = eklemedik. */
+  customerDiscord: string;
 }
 
 const emptyDraft = (rate: number): Draft => ({
@@ -43,7 +47,7 @@ const emptyDraft = (rate: number): Draft => ({
   region: 'TR', startRR: '0', riotId: '', platform: '', cost: '', cur: '$',
   feePct: '10', rate: String(rate), boosterId: '', extras: [],
   fulfil: 'internal', vendor: '', vcost: '', vcur: '$', vpaid: false,
-  accountId: '',
+  accountId: '', resellAccountId: '', customerDiscord: '',
 });
 
 export function NewOrderButton(props: {
@@ -144,6 +148,8 @@ function NewOrderModal({
       vcur: f.vcur,
       vpaid: f.vpaid,
       accountId: f.accountId ? Number(f.accountId) : null,
+      resellAccountId: f.resellAccountId ? Number(f.resellAccountId) : null,
+      customerDiscord: f.customerDiscord,
       payout,
     };
 
@@ -339,6 +345,16 @@ function NewOrderModal({
                 <input type="number" value={f.rate} onChange={(e) => set('rate', e.target.value)} placeholder="41" style={inputStyle} />
               </Field>
 
+              <Field label="Müşteri Discord">
+                <input
+                  type="text"
+                  value={f.customerDiscord}
+                  onChange={(e) => set('customerDiscord', e.target.value)}
+                  placeholder="eklemediysek boş"
+                  style={inputStyle}
+                />
+              </Field>
+
               <Field label={ext ? 'Seller' : 'Booster'}>
                 {ext ? (
                   <input type="text" value={f.vendor} onChange={(e) => set('vendor', e.target.value)} placeholder="seller name · channel" style={inputStyle} />
@@ -363,6 +379,16 @@ function NewOrderModal({
               {ext && (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginTop: 14 }}>
+                    <Field label="Verildiği hesap">
+                      <select
+                        value={f.resellAccountId}
+                        onChange={(e) => set('resellAccountId', e.target.value)}
+                        style={inputStyle}
+                      >
+                        <option value="">— hesap dışı (Discord vb.) —</option>
+                        {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </Field>
                     <Field label="Paid to seller">
                       <input type="number" value={f.vcost} onChange={(e) => set('vcost', e.target.value)} placeholder="0" style={inputStyle} />
                     </Field>
