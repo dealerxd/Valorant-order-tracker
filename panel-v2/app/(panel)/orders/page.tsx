@@ -35,7 +35,12 @@ export default async function OrdersPage({
   const src = sp.src ?? '';
   const game = sp.game ?? 'all';
 
-  const rows = filterOrders(all, {
+  // Odenmis ve bitmis isler calisanin listesinden dusuyor: "tamamlanmis
+  // siparisler profilinde kalmaz". Silinmiyorlar -- admin tam listeyi
+  // goruyor ve calisanin Toplam kazanc rakami onlari saymaya devam ediyor.
+  const visible = isAdmin ? all : all.filter((o) => !(o.status === 'tamam' && o.paid));
+
+  const rows = filterOrders(visible, {
     status,
     game,
     src,
@@ -47,10 +52,10 @@ export default async function OrdersPage({
 
   // Tab counts respect the game lens but not the tab's own dimension, so the
   // numbers stay stable as you click between them.
-  const inGame = game === 'all' ? all : all.filter((o) => o.game === game);
+  const inGame = game === 'all' ? visible : visible.filter((o) => o.game === game);
 
-  const gameCounts: Record<string, number> = { all: all.length };
-  GAME_KEYS.forEach((k) => { gameCounts[k] = all.filter((o) => o.game === k).length; });
+  const gameCounts: Record<string, number> = { all: visible.length };
+  GAME_KEYS.forEach((k) => { gameCounts[k] = visible.filter((o) => o.game === k).length; });
 
   const statusTabs: Tab[] = [
     { value: '', label: 'All', count: inGame.length },

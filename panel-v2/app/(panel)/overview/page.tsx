@@ -46,6 +46,14 @@ export default async function OverviewPage({
 
   const avgDelivery = averageTurnaround(orders.filter((o) => o.status === 'tamam'));
 
+  // Calisan gorunumu: kendi parasi. RLS zaten yalnizca kendi siparislerini
+  // verdigi icin bu toplamlar dogal olarak kisiye ozel.
+  //   bekleyen = bitmis ama odenmemis
+  //   toplam   = bugune kadar hak edilen (odenmisler dahil)
+  const doneMine = orders.filter((o) => o.status === 'tamam');
+  const pendingPay = doneMine.filter((o) => !o.paid).reduce((a, o) => a + o.payout, 0);
+  const lifetimePay = doneMine.reduce((a, o) => a + o.payout, 0);
+
   const kpis = [
     { label: 'Open Jobs', value: String(open), hint: `${orders.length} active orders`, color: C.text, gradient: '160deg,#d4af37,#b8962f' },
     ...(isAdmin ? [
@@ -59,6 +67,10 @@ export default async function OverviewPage({
     ...(isAdmin && ext.length
       ? [{ label: 'Outsourcing Cost', value: TL(extCost), hint: `${ext.length} jobs outsourced · ${TL(extDebt)} owed to sellers`, color: C.text2, gradient: '160deg,#c7ccd4,#7e838a' }]
       : []),
+    ...(isAdmin ? [] : [
+      { label: 'Bekleyen', value: TL(pendingPay), hint: `${doneMine.filter((o) => !o.paid).length} bitmiş iş · ödeme bekliyor`, color: C.amber, gradient: '160deg,#e0a534,#a87a1f' },
+      { label: 'Toplam kazanç', value: TL(lifetimePay), hint: `${doneMine.length} tamamlanmış iş`, color: C.gold, gradient: '160deg,#d4af37,#b8962f' },
+    ]),
   ];
 
   const gameQ = lens ? `&game=${lens}` : '';

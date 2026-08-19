@@ -12,16 +12,20 @@ import {
 import { TL } from '@/lib/format';
 import { C, FONT_DISPLAY, chip, dot, fillStyle, ghostButton, goldButton, innerCard, label10, rowBetween } from '@/lib/ui';
 import { DoerChip, GameBadge, StatusPill } from './OrderBits';
+import { CredentialsCard, type CredentialsData } from './CredentialsCard';
 import { Toast } from './Toast';
 
 /** Right-hand overlay. Rendered as an intercepted route over /orders, and as
     a standalone page on a direct load — `standalone` drops the backdrop and
     the close-by-navigation behaviour. */
 export function OrderDrawer({
-  order, isAdmin, standalone = false,
+  order, isAdmin, credentials, canEditCredentials, standalone = false,
 }: {
   order: Order;
   isAdmin: boolean;
+  /** Yalnizca bu siparis icin, drawer acilinca cekiliyor. */
+  credentials: CredentialsData | null;
+  canEditCredentials: boolean;
   standalone?: boolean;
 }) {
   const router = useRouter();
@@ -215,6 +219,13 @@ export function OrderDrawer({
             </div>
           </div>
         </div>
+
+        <CredentialsCard
+          orderId={o.id}
+          initial={credentials}
+          canEdit={canEditCredentials}
+          onError={setError}
+        />
 
         {/* ---- actions ---- */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>

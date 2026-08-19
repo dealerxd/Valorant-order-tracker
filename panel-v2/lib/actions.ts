@@ -263,6 +263,51 @@ export async function addNote(orderId: string, text: string): Promise<ActionResu
   }
 }
 
+/* ---- hesap bilgileri ---------------------------------------------------- */
+
+/** Siparisteki oyun hesabinin giris bilgisini kaydeder.
+
+    Bilerek order_activity'ye HICBIR sey yazilmiyor: zaman cizelgesini
+    calisan da goruyor ve "sifre guncellendi" gibi bir satir bile bilgiyi
+    sizdirmasa da gereksiz. Kimin yazdigi updated_by'da duruyor. */
+export async function saveCredentials(
+  orderId: string,
+  cred: { login: string; password: string; note: string },
+): Promise<ActionResult> {
+  const me = await requireUser();
+  const sb = await createClient();
+
+  try {
+    const { error } = await sb.from('order_credentials').upsert({
+      order_id: orderId,
+      login: cred.login.trim() || null,
+      password: cred.password || null,
+      note: cred.note.trim() || null,
+      updated_at: new Date().toISOString(),
+      updated_by: me.id,
+    });
+    if (error) throw error;
+    refresh();
+    return ok;
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Bilgileri tamamen siler -- is bitince temizlemek icin. */
+export async function clearCredentials(orderId: string): Promise<ActionResult> {
+  await requireUser();
+  const sb = await createClient();
+  try {
+    const { error } = await sb.from('order_credentials').delete().eq('order_id', orderId);
+    if (error) throw error;
+    refresh();
+    return ok;
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 /* ---- screenshots -------------------------------------------------------- */
 
 /** Board drop zone: store the file, point resells.image at it and mark the

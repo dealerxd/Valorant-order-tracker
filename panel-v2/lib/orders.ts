@@ -426,6 +426,34 @@ export const loadPanel = cache(async (): Promise<PanelData | null> => {
   };
 });
 
+export interface Credentials {
+  login: string;
+  password: string;
+  note: string;
+  updatedAt: string | null;
+}
+
+/** Giris bilgileri yalnizca drawer acilinca, tek siparis icin cekiliyor --
+    liste sorgusuna hic girmiyor, yani tarayiciya toplu inmiyor. RLS kimin
+    gorebilecegine karar veriyor; yetkisi olmayana bos donuyor. */
+export async function loadCredentials(orderId: string): Promise<Credentials | null> {
+  const sb = await createClient();
+  const { data } = await sb
+    .from('order_credentials')
+    .select('login,password,note,updated_at')
+    .eq('order_id', orderId)
+    .maybeSingle();
+
+  if (!data) return null;
+  const row = data as { login: string | null; password: string | null; note: string | null; updated_at: string | null };
+  return {
+    login: row.login ?? '',
+    password: row.password ?? '',
+    note: row.note ?? '',
+    updatedAt: row.updated_at,
+  };
+}
+
 /** Last 20 match results for the drawer, oldest first. */
 export async function loadMatches(orderId: string): Promise<('W' | 'L')[]> {
   const sb = await createClient();

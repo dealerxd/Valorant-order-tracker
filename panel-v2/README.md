@@ -275,6 +275,50 @@ in production; see `panel/js/orders.js` → `deleteRecord`.
 As of writing, every row in the database is either paid or carries finance, so
 **no** order is booster-deletable today — only an admin can remove one.
 
+## Account credentials on an order
+
+Boosting needs the customer's game login, so an order can carry one
+(`order_credentials`, one row per order: `login`, `password`, `note`).
+
+**Not encrypted, on purpose.** The booster has to sign in with it, so it must
+be readable back — a hash is useless here. Symmetric encryption would mean
+holding a key server-side and reading through `service_role`, which bypasses
+RLS and moves authorisation into hand-written app code. The protection is in
+RLS instead, where it is declarative and lives next to the data:
+
+| Role | Sees credentials for |
+|---|---|
+| admin | every order |
+| ortak | Eldorado orders only |
+| çalışan | only orders assigned to them, while active and not archived |
+
+What this stops is one booster reading another's customer credentials. What
+it does not stop is someone with direct database access.
+
+Two deliberate details:
+
+- **Separate table, not a column on `resells`.** `loadPanel` selects
+  `resells.*`, so a column would ship every password to the browser on every
+  list render. Credentials are fetched only when the drawer opens, for that
+  one order. It also lets the visibility rule be narrower than the order's.
+- **Never logged.** No `order_activity` row, no note, no notification. Who
+  last touched it is in `updated_by`.
+
+In the UI the password is masked with a reveal toggle, and there is a copy
+button so it can be used without ever being displayed.
+
+## Employee earnings
+
+A çalışan sees two figures on Overview, from their own orders only (RLS makes
+that automatic):
+
+- **Bekleyen** — completed but unpaid, i.e. what they are owed.
+- **Toplam kazanç** — everything earned to date, paid included.
+
+Once an order is completed **and paid** it drops off their Orders list, per
+the spec. It is not deleted: the admin still sees it in full and it keeps
+counting toward the employee's lifetime total.
+
 ## The shared contract
 
 Game ids, rank ladders, region values and multipliers, status keys and
